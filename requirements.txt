@@ -1,0 +1,11 @@
+streamlit>=1.38.0
+pandas>=2.2.0
+numpy>=1.26.0
+plotly>=5.22.0
+SQLAlchemy>=2.0.30
+pydantic>=2.7.0
+PyYAML>=6.0.1
+requests>=2.31.0
+yfinance>=0.2.40
+openpyxl>=3.1.2
+pytest>=8.0.0

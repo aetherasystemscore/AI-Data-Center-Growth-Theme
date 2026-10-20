@@ -1,0 +1,98 @@
+{
+  "metadata": {
+    "policy_note": "Commercial smallcases often restrict exact live constituent weights behind subscription walls. When exact weights are not publicly disclosed, AI3 marks exact weights as UNAVAILABLE or uses clearly labelled Equal-Weight Public Theme Reference Baskets, and supports manual CSV upload."
+  },
+  "baskets": [
+    {
+      "smallcase_id": "SC_AI_DC_VALUE_CHAIN",
+      "name": "AI & Data Center Value Chain (Public Theme Reference)",
+      "provider": "Smallcase Public Blog / Research Theme",
+      "source_url": "https://www.smallcase.com/blog/why-we-created-the-ai-data-center-value-chain-portfolio/",
+      "rebalancing_frequency": "QUARTERLY",
+      "fee_structure": "Subscription / Public Blog Reference",
+      "min_investment_inr": 35000.0,
+      "benchmark_index": "Nifty 500",
+      "constituents_status": "PUBLIC_THEME_CANDIDATES_EQUAL_WEIGHT_PROXY",
+      "provider_reported_cagr_pct": null,
+      "snapshot_date": "2026-10-01",
+      "notes": "Constituents derived from publicly discussed Indian data-centre value chain categories (power equipment, cooling, optical fibre, cloud/EMS). Exact commercial weights require user CSV upload.",
+      "holdings": [
+        {"symbol": "NETWEB", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "ANANTRAJ", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "E2E", "weight_pct": 8.0, "is_estimated_weight": true},
+        {"symbol": "CUMMINSIND", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "BLUESTARCO", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "HITACHIEN", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "ABB", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "POLYCAB", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "TATACOMM", "weight_pct": 12.0, "is_estimated_weight": true},
+        {"symbol": "KAYNES", "weight_pct": 10.0, "is_estimated_weight": true}
+      ]
+    },
+    {
+      "smallcase_id": "SC_NIVESHAAY_TECHSTACK",
+      "name": "Niveshaay TechStack Theme",
+      "provider": "Niveshaay Investment Advisors",
+      "source_url": "https://eb.niveshaay.com/baskets/techstack-theme",
+      "rebalancing_frequency": "QUARTERLY",
+      "fee_structure": "2.0% p.a. / Subscription (Locked behind login)",
+      "min_investment_inr": 50000.0,
+      "benchmark_index": "BSE 500",
+      "constituents_status": "PROPRIETARY_LOCKED_CSV_UPLOAD_REQUIRED",
+      "provider_reported_cagr_pct": null,
+      "snapshot_date": "2026-10-01",
+      "notes": "Exact constituent weights are behind subscriber login at eb.niveshaay.com. Per compliance rules, AI3 does NOT scrape behind login walls or invent proprietary adviser picks. Upload your subscribed CSV snapshot to run overlap analysis, or use the public EMS/Tech proxy below.",
+      "holdings": []
+    },
+    {
+      "smallcase_id": "SC_INDIA_DC_PUBLIC_LIST",
+      "name": "Data Centre Stocks in India (Public Overview List)",
+      "provider": "Smallcase Public Thematic Lists",
+      "source_url": "https://www.smallcase.com/lists/data-centre-stocks-in-india/",
+      "rebalancing_frequency": "SEMI_ANNUAL",
+      "fee_structure": "Free Public Thematic Watchlist",
+      "min_investment_inr": 25000.0,
+      "benchmark_index": "Nifty Infrastructure",
+      "constituents_status": "PUBLIC_WATCHLIST_EQUAL_WEIGHT",
+      "provider_reported_cagr_pct": null,
+      "snapshot_date": "2026-10-01",
+      "notes": "Publicly accessible list of companies operating or building data centres and allied infrastructure in India.",
+      "holdings": [
+        {"symbol": "BHARTIARTL", "weight_pct": 12.5, "is_estimated_weight": true},
+        {"symbol": "TATACOMM", "weight_pct": 12.5, "is_estimated_weight": true},
+        {"symbol": "RELIANCE", "weight_pct": 12.5, "is_estimated_weight": true},
+        {"symbol": "LT", "weight_pct": 12.5, "is_estimated_weight": true},
+        {"symbol": "ANANTRAJ", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "NETWEB", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "SIEMENS", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "CUMMINSIND", "weight_pct": 10.0, "is_estimated_weight": true},
+        {"symbol": "BLUESTARCO", "weight_pct": 10.0, "is_estimated_weight": true}
+      ]
+    },
+    {
+      "smallcase_id": "SC_AI3_POWER_GRID_BOTTLENECK",
+      "name": "AI3 Custom Research Basket: Power, Transformers & Cooling Bottlenecks",
+      "provider": "AI3 Internal Research Benchmark",
+      "source_url": "local://ai3/config/seed_smallcases.json",
+      "rebalancing_frequency": "QUARTERLY",
+      "fee_structure": "0.0% (Self-constructed Research Basket)",
+      "min_investment_inr": 20000.0,
+      "benchmark_index": "Nifty Energy",
+      "constituents_status": "VERIFIED_RESEARCH_BASKET",
+      "provider_reported_cagr_pct": null,
+      "snapshot_date": "2026-10-20",
+      "notes": "Self-created AI3 research basket targeting physical power transformation, backup gensets, HV cables and thermal cooling with lower overlap with IT-heavy indices.",
+      "holdings": [
+        {"symbol": "POWERGRID", "weight_pct": 14.0, "is_estimated_weight": false},
+        {"symbol": "NTPC", "weight_pct": 12.0, "is_estimated_weight": false},
+        {"symbol": "CUMMINSIND", "weight_pct": 12.0, "is_estimated_weight": false},
+        {"symbol": "KIRLOSENG", "weight_pct": 10.0, "is_estimated_weight": false},
+        {"symbol": "APARINDS", "weight_pct": 10.0, "is_estimated_weight": false},
+        {"symbol": "KEI", "weight_pct": 10.0, "is_estimated_weight": false},
+        {"symbol": "TDPOWERSYS", "weight_pct": 10.0, "is_estimated_weight": false},
+        {"symbol": "TRIL", "weight_pct": 10.0, "is_estimated_weight": false},
+        {"symbol": "BLUESTARCO", "weight_pct": 12.0, "is_estimated_weight": false}
+      ]
+    }
+  ]
+}
