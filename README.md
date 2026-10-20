@@ -1,5 +1,12 @@
 # ⚡ AI Infrastructure Investment Intelligence (AI3)
 
+<!-- LIVE_STREAMLIT_APP_BANNER_START -->
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-data-center-growth-theme.streamlit.app/)
+
+> **🚀 Live Streamlit App:** [**https://ai-data-center-growth-theme.streamlit.app/**](https://ai-data-center-growth-theme.streamlit.app/)
+<!-- LIVE_STREAMLIT_APP_BANNER_END -->
+
+
 **AI Infrastructure, Data Centre, Small Electronic Components, Circular Electronics & IPO Investment Research Platform**
 
 AI3 is a production-oriented Python quantitative research and portfolio-analysis platform built for Indian equity investors (`NSE`, `BSE`, `NSE Emerge`, `BSE SME`) with global supply-chain benchmark comparisons (`US`, `Taiwan`, `Japan`, `South Korea`, `Europe`).
