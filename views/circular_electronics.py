@@ -15,6 +15,7 @@ if _REPO_ROOT not in sys.path:
 import pandas as pd
 import streamlit as st
 
+from analytics.equity_enrichment import compute_enriched_equity_metrics
 from analytics.exposure_scoring import score_company_exposure
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
@@ -43,6 +44,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         tags = sec.get("sector_tags", [])
         f = f_map.get(sec["symbol"], {})
         bd = score_company_exposure(sec, f, profile="CIRCULAR_ECONOMY_FOCUS")
+        enr = compute_enriched_equity_metrics(sec, f, profile="CIRCULAR_ECONOMY_FOCUS")
 
         row_data = {
             "Symbol": sec["symbol"],
@@ -51,8 +53,16 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             "Geography": sec["geography"],
             "Universe Tier": sec["universe_tier"],
             "Investable Status": "APPROVED_INVESTABLE" if (sec["is_investable"] and not bd.investability_blocked) else "ISOLATED_HIGH_RISK_RESEARCH",
-            "Subcategories": ", ".join(sec.get("subcategories", [])),
+            "CMP (Rs)": enr["cmp"],
             "Circular Profile Score": bd.profile_adjusted_score,
+            "Fundamental Score (/100)": enr["fundamental_score"],
+            "Technical Score (/100)": enr["technical_score"],
+            "Analyst Score (/100)": enr["analyst_score"],
+            "Analyst Rating": enr["analyst_rating"],
+            "Price Trend (1M | 6M | 1Y | 2Y)": enr["price_trend_summary"],
+            "Promoter % (2Y Trend)": enr["promoter_trend"],
+            "FII % (2Y Trend)": enr["fii_trend"],
+            "DII % (2Y Trend)": enr["dii_trend"],
             "Revenue (Rs Cr)": f.get("revenue_inr_cr"),
             "PAT (Rs Cr)": f.get("pat_inr_cr"),
             "ROCE (%)": f.get("roce_pct"),
@@ -69,6 +79,10 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
 
     st.subheader("1. Dedicated E-Waste, ITAD & Circular Electronics Candidates")
     st.dataframe(pd.DataFrame(circular_rows), use_container_width=True, hide_index=True)
+
+    if adjacent_rows:
+        with st.expander("🔗 Adjacent Circular Supply-Chain & Reverse-Logistics Peers (Copper, EMS, IT Distribution)", expanded=False):
+            st.dataframe(pd.DataFrame(adjacent_rows), use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("2. Candidate-by-Candidate Due Diligence Verdict")

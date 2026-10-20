@@ -27,6 +27,7 @@ from jobs.discover_new_listings import run_discover_new_listings
 from jobs.refresh_financials import run_refresh_financials
 from jobs.refresh_prices import run_refresh_prices
 from jobs.research_news import run_research_news
+from jobs.run_paper_trade_3pm import run_paper_trade_3pm_job
 from jobs.update_security_master import run_update_security_master
 
 
@@ -57,12 +58,59 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     with st.expander("🖥️ Detailed Hosting Infrastructure, CPU, RAM & Container Specifications", expanded=True):
         render_host_specs_table(tel)
 
-    st.subheader("1. Automated Discovery & Refresh Jobs")
+    st.subheader("1. Automated Discovery, Refresh & 3:00 PM IST Paper-Trade Jobs")
     st.caption(
-        "Execute any of the 6 background discovery and data-validation jobs on demand. Every job logs its execution to `job_runs`."
+        "Execute any of the 7 background discovery, data-validation, and daily 3:00 PM IST paper-trading jobs on demand. Every job logs its execution to `job_runs`."
     )
 
-    jb1, jb2, jb3, jb4, jb5, jb6 = st.columns(6)
+    with st.expander("📖 How to Use Each Job Button (Step-by-Step Operational Guide)", expanded=True):
+        button_guide = [
+            {
+                "Button": "1. 🔄 Update Security Master",
+                "When to Click": "First step after adding new tickers or after corporate actions (symbol changes/mergers).",
+                "What It Does": "Validates all NSE/BSE/Global tickers, resolves legacy ticker aliases (e.g., POWERINDIA -> HITACHIEN, ABBINDIA -> ABB), verifies ISINs, and ensures high-risk e-waste names remain quarantined.",
+                "Where Output Appears": "Updates the Security Master table & logs a SUCCESS entry in Section 4 (Job Execution Audit Log).",
+            },
+            {
+                "Button": "2. 🆕 Discover New Listings",
+                "When to Click": "Weekly or whenever new Mainboard/SME companies list on NSE/BSE.",
+                "What It Does": "Scans recent NSE/BSE listings against AI infrastructure, transformer, EMS, cooling, cable, and e-waste keyword taxonomies, and stages matching candidates as CANDIDATE_PENDING_REVIEW.",
+                "Where Output Appears": "Populates Section 2 (Discovery Queue) below for analyst verification.",
+            },
+            {
+                "Button": "3. 📑 Discover SEBI IPOs",
+                "When to Click": "Before reviewing Tab 7 (IPO, DRHP & New Listings Tracker).",
+                "What It Does": "Scans SEBI DRHP/RHP filings and exchange IPO calendars for upcoming AI, data-centre EPC, power equipment, and circular-electronics public issues, scoring their Proceed Quality.",
+                "Where Output Appears": "Updates Tab 7 (IPO Tracker) & logs run metrics in Section 4.",
+            },
+            {
+                "Button": "4. 💹 Refresh Prices",
+                "When to Click": "Daily (after market close or before running technicals/backtests).",
+                "What It Does": "Fetches and updates OHLCV price history and 20-day Average Daily Turnover (ADV) across the security universe, tagging each series with its provenance (REPORTED vs DERIVED).",
+                "Where Output Appears": "Updates CMP, Technical Scores, Moving Averages (Tab 3), and Backtest price series (Tab 10 & Tab 12).",
+            },
+            {
+                "Button": "5. 📊 Refresh Financials",
+                "When to Click": "Quarterly after earnings season or when screening valuation/ROCE.",
+                "What It Does": "Re-validates quarterly & annual fundamentals (Revenue, EBITDA, ROCE, D/E, CFO/EBITDA, Order Book, Promoter/FII/DII holdings, and Auditor Flags) and recalculates 100-pt AI Exposure Scores.",
+                "Where Output Appears": "Updates Fundamental Scores and Valuation tables across Tabs 1, 2, 3, 4, 8, and 9.",
+            },
+            {
+                "Button": "6. 📰 Refresh Filing News",
+                "When to Click": "Before inspecting company research memos in Tab 3.",
+                "What It Does": "Runs the Fact-vs-Narrative NLP extractor on corporate announcements, investor presentations, and order-win filings to separate verified purchase orders from non-binding MOUs.",
+                "Where Output Appears": "Updates Structured Institutional Research Memos & Evidence Badges in Tab 3.",
+            },
+            {
+                "Button": "7. 🕒 Run 3 PM IST Paper Trade",
+                "When to Click": "Runs automatically every working day (Mon–Fri) at 3:00 PM IST, or click manually to force a cycle.",
+                "What It Does": "Marks all open forward paper-trading positions to the 3:00 PM IST market price, logs Indian delivery transaction costs, and updates the forward NAV ledger.",
+                "Where Output Appears": "Updates Tab 12 (Paper Trade @ 3 PM IST & 5Y Audit) and logs execution in Section 4.",
+            },
+        ]
+        st.dataframe(pd.DataFrame(button_guide), use_container_width=True, hide_index=True)
+
+    jb1, jb2, jb3, jb4, jb5, jb6, jb7 = st.columns(7)
     if jb1.button("🔄 Update Security Master", use_container_width=True):
         out = run_update_security_master(repo)
         st.success(out.get("message", str(out)))
@@ -80,6 +128,9 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         st.success(out.get("message", str(out)))
     if jb6.button("📰 Refresh Filing News", use_container_width=True):
         out = run_research_news(repo)
+        st.success(out.get("message", str(out)))
+    if jb7.button("🕒 Run 3 PM IST Paper Trade", use_container_width=True):
+        out = run_paper_trade_3pm_job(repo, force=True)
         st.success(out.get("message", str(out)))
 
     st.divider()

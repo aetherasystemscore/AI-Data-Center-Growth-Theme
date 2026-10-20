@@ -32,6 +32,20 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         "only enter the eligible universe after their listing date), 60-day fundamental reporting lags, next-bar open execution, and Indian statutory delivery costs."
     )
 
+    with st.expander("ℹ️ What is the Purpose of Tab 10 (Point-in-Time Backtesting)? — Click to Read", expanded=True):
+        st.markdown(
+            """
+            **Why Tab 10 Exists:**
+            Most retail backtests suffer from **look-ahead bias** and **IPO backfilling bias** — they accidentally include newly listed AI/EMS winners (such as `NETWEB` listed in July 2023 or `KAYNES` listed in Nov 2022) in a 2021 portfolio before those stocks even traded on NSE/BSE, or use FY financials before the quarterly results were publicly filed.
+
+            **How Tab 10 Solves This:**
+            1. **Strict Listing-Date Gatekeeper (`Point-in-Time Eligibility`):** On every historical rebalance date $t$, the engine checks each stock's exact NSE/BSE `listing_date`. Any company not yet listed on date $t$ is strictly excluded from that rebalance and only enters the investable universe on the first rebalance *after* its IPO listing.
+            2. **60-Day Fundamental Reporting Lag:** Financial ratios and AI revenue disclosures are lagged by 60 days after quarter/year-end so the strategy never trades on unreleased earnings.
+            3. **Next-Day Open Execution & Indian Delivery Friction:** Signals generated at rebalance close $t$ are executed at the next trading day's price ($t+1$) after deducting Indian statutory delivery costs (`STT 0.10%`, `Stamp Duty 0.015%`, `Exchange/SEBI/GST`, and liquidity-scaled slippage).
+            4. **Rolling Walk-Forward Validation (`12M In-Sample / 6M Out-of-Sample`):** Tests whether the chosen allocation strategy (`CONVICTION_WEIGHTED`, `EQUAL_WEIGHT`, `INVERSE_VOLATILITY`, `RISK_PARITY`, etc.) continues to outperform an equal-weight benchmark in unseen future windows.
+            """
+        )
+
     all_secs = repo.get_securities(geography="INDIA", investable_only=True)
     avail_syms = [s["symbol"] for s in all_secs]
     default_bt_syms = [
@@ -90,7 +104,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     k3.metric("Sharpe / Sortino", f"{m['sharpe_ratio']}", f"Sortino: {m['sortino_ratio']}")
     k4.metric("Max Drawdown (%)", f"{m['max_drawdown_pct']}%", f"Calmar: {m['calmar_ratio']}")
     k5.metric("Information Ratio", f"{m['information_ratio']}" if m["information_ratio"] is not None else "N/A", f"TE: {m['tracking_error_pct']}%")
-    k6.metric("Annual Turnover", f"{m['annualised_turnover_pct']}%", f"Tx Cost Drag: {m['total_transaction_cost_drag_pct']}%/yr")
+    k6.metric("Annual Turnover", f"{m['annualised_turnover_pct']}%", f"Tx Cost Drag: {m['total_transaction_cost_pct'] if 'total_transaction_cost_pct' in m else m['total_transaction_cost_drag_pct']}%/yr")
 
     # Equity curve plot
     fig_nav = go.Figure()

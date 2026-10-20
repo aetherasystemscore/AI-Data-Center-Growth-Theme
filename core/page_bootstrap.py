@@ -28,6 +28,7 @@ MODULES: list[tuple[str, str, str]] = [
     ("portfolio_builder", "📐 9. Portfolio Builder & Optimiser", "📐 9. Portfolio"),
     ("backtesting", "📈 10. Point-in-Time Backtesting", "📈 10. Backtest"),
     ("settings", "⚙️ 11. Discovery Jobs & Host Specs", "⚙️ 11. Host/Jobs"),
+    ("paper_trading", "🕒 12. Paper Trade (3 PM IST) & 5Y Audit", "🕒 12. Paper Trade"),
 ]
 
 SLUG_TO_SIDEBAR_LABEL: dict[str, str] = {slug: s_label for slug, s_label, _ in MODULES}
@@ -35,11 +36,19 @@ SIDEBAR_LABEL_TO_SLUG: dict[str, str] = {s_label: slug for slug, s_label, _ in M
 
 
 @st.cache_resource
-def init_platform() -> tuple[AI3Repository, DataIngestionService]:
-    """Initialize SQLite repository and seed/bootstrap data once per server process."""
+def init_platform(cache_version: str = "v3.1") -> tuple[AI3Repository, DataIngestionService]:
+    """Initialize SQLite repository, seed/bootstrap data, and start the 3:00 PM IST paper-trade scheduler."""
+    _ = cache_version
     repo = AI3Repository()
     ingestion = DataIngestionService(repo=repo)
     ingestion.ensure_bootstrapped()
+    try:
+        from portfolio.paper_trading import ensure_paper_trading_ledger, start_background_3pm_ist_scheduler
+
+        ensure_paper_trading_ledger(repo=repo, ingestion=ingestion)
+        start_background_3pm_ist_scheduler(repo=repo, ingestion=ingestion)
+    except Exception:
+        pass
     return repo, ingestion
 
 
@@ -236,18 +245,22 @@ def render_top_bar(show_quick_nav: bool = True) -> None:
 
     if show_quick_nav:
         active_slug = st.session_state.get("ai3_active_module_slug", "dashboard")
-        nav_cols = st.columns(len(MODULES))
-        for col, (slug, _, short_label) in zip(nav_cols, MODULES):
-            with col:
-                btn_type = "primary" if slug == active_slug else "secondary"
-                st.button(
-                    short_label,
-                    key=f"top_quick_nav_{slug}",
-                    type=btn_type,
-                    use_container_width=True,
-                    on_click=_switch_module_callback,
-                    args=(slug,),
-                )
+        # Render 2 rows of 6 compact buttons so all 12 modules fit cleanly
+        row1_mods = MODULES[:6]
+        row2_mods = MODULES[6:]
+        for mod_row in (row1_mods, row2_mods):
+            nav_cols = st.columns(len(mod_row))
+            for col, (slug, _, short_label) in zip(nav_cols, mod_row):
+                with col:
+                    btn_type = "primary" if slug == active_slug else "secondary"
+                    st.button(
+                        short_label,
+                        key=f"top_quick_nav_{slug}",
+                        type=btn_type,
+                        use_container_width=True,
+                        on_click=_switch_module_callback,
+                        args=(slug,),
+                    )
 
 
 def render_sidebar_controls() -> str:

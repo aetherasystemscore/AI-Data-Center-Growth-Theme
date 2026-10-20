@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from analytics.equity_enrichment import compute_enriched_equity_metrics
 from analytics.exposure_scoring import score_company_exposure
 
 
@@ -85,6 +86,7 @@ def build_portfolio_summary(
         sec = securities_map.get(sym, {"symbol": sym, "company_name": sym, "primary_category": "OTHER", "is_investable": True})
         f = fundamentals_map.get(sym, {})
         score_bd = score_company_exposure(sec, f, profile=profile)
+        enr = compute_enriched_equity_metrics(sec, f, profile=profile)
 
         cat = sec.get("primary_category", "OTHER")
         cat_weights[cat] = round(cat_weights.get(cat, 0.0) + w_pct, 2)
@@ -116,9 +118,18 @@ def build_portfolio_summary(
                 "symbol": sym,
                 "company_name": sec.get("company_name", sym),
                 "weight_pct": round(w_pct, 2),
+                "cmp": enr["cmp"],
                 "primary_category": cat,
                 "ai_exposure_score": score_bd.total_score,
                 "profile_score": score_bd.profile_adjusted_score,
+                "fundamental_score": enr["fundamental_score"],
+                "technical_score": enr["technical_score"],
+                "analyst_score": enr["analyst_score"],
+                "analyst_rating": enr["analyst_rating"],
+                "price_trend_summary": enr["price_trend_summary"],
+                "promoter_trend": enr["promoter_trend"],
+                "fii_trend": enr["fii_trend"],
+                "dii_trend": enr["dii_trend"],
                 "direct_ai_dc_rev_pct": f.get("direct_ai_dc_rev_share_pct"),
                 "trailing_pe": t_pe,
                 "roce_pct": roce,

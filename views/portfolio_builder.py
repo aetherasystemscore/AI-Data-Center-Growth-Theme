@@ -16,6 +16,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from analytics.equity_enrichment import compute_enriched_equity_metrics
 from analytics.exposure_scoring import score_company_exposure
 from analytics.portfolio_optimisation import optimise_portfolio_weights
 from analytics.portfolio_risk import run_portfolio_stress_tests
@@ -109,7 +110,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         for v in summary["constraint_violations"]:
             st.warning(v)
 
-    col_l, col_r = st.columns([3, 2])
+    col_l, col_r = st.columns([3.2, 1.8])
     with col_l:
         st.subheader(f"Optimised Holdings (`{opt_method}`)")
         df_hold = pd.DataFrame(summary["holdings"])
@@ -131,6 +132,17 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
 
     st.divider()
     st.subheader("💱 Rebalance & Indian Delivery Transaction Cost Simulator")
+    st.info(
+        "**Purpose of the Rebalance & Indian Delivery Transaction Cost Simulator:**\n"
+        "1. **Converts Target Percentage Weights into Exact Executable Share Orders:** Given your portfolio capital (in Rs), it calculates the exact **Notional Order Value (`Rs`)** and **Executable Share Quantity (`Shares Qty`)** at each stock's **Current Market Price (`CMP`)**.\n"
+        "2. **Quantifies Real-World Indian Cash-Market Delivery Friction:** Paper returns often overstate live performance because they ignore statutory Indian delivery levies and market-impact costs. This simulator computes:\n"
+        "   - **Securities Transaction Tax (STT):** `0.10%` (`10 bps`) on both BUY and SELL equity delivery legs.\n"
+        "   - **Stamp Duty:** `0.015%` (`1.5 bps`) on BUY delivery legs.\n"
+        "   - **Brokerage, NSE Exchange Turnover (`0.00325%`), SEBI Fee (`0.0001%`) & 18% GST:** `~5.9 bps`.\n"
+        "   - **Liquidity-Scaled Slippage & Impact Penalty:** Base `10 bps` bid-ask slippage for liquid large/mid-caps, scaling up by `+35 bps` to `+70 bps` if a small/mid-cap stock's 20-Day Average Daily Turnover (`ADV`) is below `Rs 10 Cr` or if your order exceeds `1%` of daily market volume.\n"
+        "3. **Prevents Over-Trading:** Helps you verify whether rebalancing into less-liquid component suppliers is cost-effective before placing orders."
+    )
+
     cap_inr = st.number_input("Portfolio Notional Capital (Rs)", min_value=100000.0, value=1000000.0, step=100000.0)
     adv_map = {s: float(f_map.get(s, {}).get("avg_daily_turnover_inr_cr") or 20.0) for s in selected_syms}
     reb = compute_rebalance_trades(
@@ -139,11 +151,50 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         portfolio_value_inr=cap_inr,
         turnover_map_cr=adv_map,
     )
+
+    # Enrich each trade row with CMP, Share Quantity, Fundamental/Technical/Analyst Scores, P/E, ROCE, 2Y Price & Holding Trends
+    enriched_trades = []
+    for t in reb["trades"]:
+        sym = t["symbol"]
+        sec = sec_map.get(sym, {"symbol": sym, "company_name": sym, "geography": "INDIA"})
+        f = f_map.get(sym, {})
+        enr = compute_enriched_equity_metrics(sec, f, profile=profile)
+        cmp_val = float(enr["cmp"] or 100.0)
+        whole_shares = int(t["notional_inr"] // max(1.0, cmp_val))
+        actual_invested = round(whole_shares * cmp_val, 2)
+
+        enriched_trades.append(
+            {
+                "Symbol": sym,
+                "Company": sec.get("company_name", sym),
+                "Side": t["side"],
+                "Target Weight (%)": t["target_weight_pct"],
+                "CMP (Rs)": cmp_val,
+                "Shares Qty (Whole)": whole_shares,
+                "Target Notional (Rs)": t["notional_inr"],
+                "Actual Invested (Rs)": actual_invested,
+                "Est. Total Tx Cost (Rs)": t["estimated_cost_inr"],
+                "Effective Cost (bps)": t["effective_cost_bps"],
+                "20D Daily Turnover (Rs Cr)": f.get("avg_daily_turnover_inr_cr"),
+                "AI Score (/100)": enr["ai_exposure_score"],
+                "Fundamental Score (/100)": enr["fundamental_score"],
+                "Technical Score (/100)": enr["technical_score"],
+                "Analyst Score (/100)": enr["analyst_score"],
+                "Analyst Rating": enr["analyst_rating"],
+                "Trailing P/E": f.get("trailing_pe"),
+                "ROCE (%)": f.get("roce_pct"),
+                "Price Trend (1M | 6M | 1Y | 2Y)": enr["price_trend_summary"],
+                "Promoter % (2Y Trend)": enr["promoter_trend"],
+                "FII % (2Y Trend)": enr["fii_trend"],
+                "DII % (2Y Trend)": enr["dii_trend"],
+            }
+        )
+
     st.caption(
         f"**Initial Deployment Cost (STT 0.10% + Stamp Duty 0.015% + Exchange/SEBI/GST + Liquidity Slippage):** "
         f"`Rs {reb['total_transaction_cost_inr']:,.2f}` (`{(reb['total_transaction_cost_inr'] / cap_inr) * 100:.3f}%` of capital)"
     )
-    st.dataframe(pd.DataFrame(reb["trades"]), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(enriched_trades), use_container_width=True, hide_index=True)
 
 
 if __name__ in ("__main__", "__page__"):

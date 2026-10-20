@@ -15,11 +15,16 @@ if _REPO_ROOT not in sys.path:
 from datetime import date, timedelta
 
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 from ai.document_extraction import extract_facts_from_filing_text
 from ai.research_summariser import generate_company_research_memo
+from analytics.equity_enrichment import (
+    compute_enriched_equity_metrics,
+    get_2y_quarterly_shareholding_and_price,
+)
 from analytics.exposure_scoring import score_company_exposure
 from analytics.fundamentals import evaluate_fundamental_health
 from analytics.technicals import compute_technical_indicators
@@ -62,6 +67,8 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     score_bd = score_company_exposure(sec, f, profile=profile)
     fund_health = evaluate_fundamental_health(f, sec)
     val_metrics = compute_valuation_metrics(f, peer_records=peer_f)
+    enr = compute_enriched_equity_metrics(sec, f, profile=profile)
+    ccy = "Rs" if sec.get("geography") == "INDIA" else sec.get("currency", "USD")
 
     # Header status banner
     if score_bd.investability_blocked or not sec["is_investable"]:
@@ -84,31 +91,21 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         )
 
     m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("Base AI Score (100)", f"{score_bd.total_score:.1f}/100", f"Profile: {score_bd.profile_adjusted_score:.1f}")
-    m2.metric(
-        "Direct AI/DC Rev %",
-        f"{f.get('direct_ai_dc_rev_share_pct'):.1f}%" if f.get("direct_ai_dc_rev_share_pct") is not None else "N/A",
-        score_bd.evidence_type.value,
-    )
-    m3.metric(
-        "Trailing P/E",
+    m1.metric("Current Market Price (CMP)", f"{ccy} {enr['cmp']:,.1f}", f"Target: {ccy} {enr['target_price']:,.1f} ({enr['analyst_upside_pct']:+.1f}%)")
+    m2.metric("AI Exposure Score (100)", f"{score_bd.total_score:.1f}/100", f"Profile: {score_bd.profile_adjusted_score:.1f}")
+    m3.metric("Fundamental Score", f"{enr['fundamental_score']:.1f}/100", f"Grade: {enr['fundamental_grade']} | ROCE: {f.get('roce_pct') or 'N/A'}%")
+    m4.metric("Technical Score", f"{enr['technical_score']:.1f}/100", f"{enr['technical_regime']} | RSI: {enr['rsi_14']}")
+    m5.metric("Analyst Consensus", f"{enr['analyst_score']:.1f}/100", f"{enr['analyst_rating']}")
+    m6.metric(
+        "Trailing / Forward P/E",
         f"{val_metrics['trailing_pe']:.1f}x" if val_metrics["trailing_pe"] is not None else "N/A",
         f"Fwd: {val_metrics['forward_pe']:.1f}x" if val_metrics["forward_pe"] is not None else "Fwd: N/A",
     )
-    m4.metric(
-        "ROCE / ROE",
-        f"{f.get('roce_pct'):.1f}%" if f.get("roce_pct") is not None else "N/A",
-        f"ROE: {f.get('roe_pct'):.1f}%" if f.get("roe_pct") is not None else "ROE: N/A",
-    )
-    m5.metric(
-        "Order Book / Sales",
-        f"{f.get('order_book_to_LTM_sales'):.2f}x" if f.get("order_book_to_LTM_sales") is not None else "N/A",
-        f"Rs {f.get('order_book_inr_cr'):,.0f} Cr" if f.get("order_book_inr_cr") else "No Backlog Disclosed",
-    )
-    m6.metric(
-        "Sector KPI",
-        f"{f.get('sector_kpi_value')} {f.get('sector_kpi_unit') or ''}" if f.get("sector_kpi_value") is not None else "N/A",
-        f.get("sector_kpi_name") or "Operational Metric",
+
+    st.caption(
+        f"**2Y Price Trend (`1M | 6M | 1Y | 2Y`):** `{enr['price_trend_summary']}` &nbsp;|&nbsp; "
+        f"**2Y Shareholding Trend:** `{enr['combined_holding_trend']}` &nbsp;|&nbsp; "
+        f"**Direct AI/DC Rev:** `{f.get('direct_ai_dc_rev_share_pct') or 'N/A'}%` ({score_bd.evidence_type.value})"
     )
 
     st.divider()
@@ -155,10 +152,29 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
 
     st.divider()
 
+    # 2-Year Shareholding & Price Trend Section
+    st.subheader("📊 Last 2 Years (8 Quarters): Promoter, FII & DII Shareholding + Price Trend")
+    q_df = pd.DataFrame(get_2y_quarterly_shareholding_and_price(sec, f))
+    col_sh_chart, col_sh_tbl = st.columns([1.4, 1.6])
+    with col_sh_chart:
+        fig_sh = px.line(
+            q_df,
+            x="Quarter",
+            y=["Promoter (%)", "FII (%)", "DII (%)", "Public / Other (%)"],
+            markers=True,
+            title=f"{symbol} — 2-Year Quarterly Shareholding Trend (%)",
+        )
+        fig_sh.update_layout(height=320, margin=dict(t=35, l=10, r=10, b=10), legend=dict(orientation="h", y=-0.22))
+        st.plotly_chart(fig_sh, use_container_width=True)
+    with col_sh_tbl:
+        st.dataframe(q_df, use_container_width=True, hide_index=True, height=320)
+
+    st.divider()
+
     # Price & Technicals section
-    st.subheader("📈 Price Action, Moving Averages (20/50/200 DMA) & Technical Regime")
+    st.subheader("📈 Price Action, Moving Averages (20/50/200 DMA) & Technical Regime (Last 2 Years)")
     end_dt = date.today()
-    start_dt = end_dt - timedelta(days=500)
+    start_dt = end_dt - timedelta(days=730)
     price_res = ingestion.get_or_generate_price_history(symbol, start_date=start_dt, end_date=end_dt)
     df_p = price_res.get("df")
     if df_p is not None and not df_p.empty:

@@ -68,6 +68,10 @@ def main() -> None:
         from views.settings import render
 
         render(repo, ingestion)
+    elif selected_module == "paper_trading":
+        from views.paper_trading import render
+
+        render(repo, ingestion)
 
 
 if __name__ == "__main__":

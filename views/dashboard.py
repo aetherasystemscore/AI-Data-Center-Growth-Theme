@@ -16,6 +16,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from analytics.equity_enrichment import compute_enriched_equity_metrics
 from analytics.exposure_scoring import score_company_exposure
 from core.config import load_sector_taxonomy
 from data.ingestion import DataIngestionService
@@ -25,7 +26,7 @@ from database.repository import AI3Repository
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.title("⚡ AI Infrastructure Investment Intelligence (AI3)")
     st.caption(
-        "Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics & IPO Research Platform"
+        "Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics, IPO & Daily 3 PM IST Paper-Trading Platform"
     )
 
     profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
@@ -49,11 +50,12 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
 
     st.divider()
 
-    # Build scored summary dataframe
+    # Build scored & enriched summary dataframe
     rows = []
     for sec in all_secs:
         f = f_map.get(sec["symbol"], {})
         bd = score_company_exposure(sec, f, profile=profile)
+        enr = compute_enriched_equity_metrics(sec, f, profile=profile)
         cat_code = sec.get("primary_category", "OTHER")
         cat_name = taxonomy.get(cat_code, {}).get("name", cat_code)
         rows.append(
@@ -66,13 +68,22 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "Value Chain Segment": cat_name,
                 "Universe Tier": sec["universe_tier"],
                 "Investable": sec["is_investable"] and not bd.investability_blocked,
+                "CMP": enr["cmp"],
                 "Base AI Score (100)": bd.total_score,
                 f"Profile Score ({profile})": bd.profile_adjusted_score,
+                "Fundamental Score (100)": enr["fundamental_score"],
+                "Technical Score (100)": enr["technical_score"],
+                "Analyst Score (100)": enr["analyst_score"],
+                "Analyst Rating": enr["analyst_rating"],
                 "Direct AI/DC Rev (%)": f.get("direct_ai_dc_rev_share_pct"),
                 "Order Book / Sales (x)": f.get("order_book_to_LTM_sales"),
                 "Market Cap (Rs Cr)": f.get("market_cap_inr_cr"),
                 "Trailing P/E": f.get("trailing_pe"),
                 "ROCE (%)": f.get("roce_pct"),
+                "Price Trend (1M | 6M | 1Y | 2Y)": enr["price_trend_summary"],
+                "Promoter % (2Y Trend)": enr["promoter_trend"],
+                "FII % (2Y Trend)": enr["fii_trend"],
+                "DII % (2Y Trend)": enr["dii_trend"],
                 "Evidence Type": bd.evidence_type.value,
                 "Risk Flags": ", ".join(rf.code for rf in bd.risk_flags) if bd.risk_flags else "NONE",
                 "Data Provenance": f.get("value_type", "SEED_REFERENCE_SNAPSHOT"),
@@ -91,7 +102,15 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 values="Market Cap (Rs Cr)",
                 color="Base AI Score (100)",
                 color_continuous_scale="Viridis",
-                hover_data=["Company", "Direct AI/DC Rev (%)", "Trailing P/E", "ROCE (%)", "Evidence Type"],
+                hover_data=[
+                    "Company",
+                    "CMP",
+                    "Fundamental Score (100)",
+                    "Technical Score (100)",
+                    "Analyst Rating",
+                    "Trailing P/E",
+                    "ROCE (%)",
+                ],
             )
             fig_tree.update_layout(margin=dict(t=15, l=5, r=5, b=5), height=320)
             st.plotly_chart(fig_tree, use_container_width=True)
@@ -103,14 +122,15 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             .agg(
                 Companies=("Symbol", "count"),
                 Avg_AI_Score=("Base AI Score (100)", "mean"),
+                Avg_Fund_Score=("Fundamental Score (100)", "mean"),
+                Avg_Tech_Score=("Technical Score (100)", "mean"),
                 Median_PE=("Trailing P/E", "median"),
                 Median_ROCE=("ROCE (%)", "median"),
             )
             .sort_values("Avg_AI_Score", ascending=False)
         )
-        cat_summary["Avg_AI_Score"] = cat_summary["Avg_AI_Score"].round(1)
-        cat_summary["Median_PE"] = cat_summary["Median_PE"].round(1)
-        cat_summary["Median_ROCE"] = cat_summary["Median_ROCE"].round(1)
+        for col_name in ["Avg_AI_Score", "Avg_Fund_Score", "Avg_Tech_Score", "Median_PE", "Median_ROCE"]:
+            cat_summary[col_name] = cat_summary[col_name].round(1)
         st.dataframe(cat_summary, use_container_width=True, hide_index=True, height=320)
 
     st.divider()
@@ -123,26 +143,33 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     )
 
     with tab1:
-        top_ind = df_ind_inv.sort_values(f"Profile Score ({profile})", ascending=False).head(20)
+        top_ind = df_ind_inv.sort_values(f"Profile Score ({profile})", ascending=False).head(25)
         st.dataframe(
             top_ind[
                 [
                     "Symbol",
                     "Company",
                     "Value Chain Segment",
+                    "CMP",
                     "Base AI Score (100)",
                     f"Profile Score ({profile})",
+                    "Fundamental Score (100)",
+                    "Technical Score (100)",
+                    "Analyst Score (100)",
+                    "Analyst Rating",
                     "Direct AI/DC Rev (%)",
-                    "Order Book / Sales (x)",
                     "Trailing P/E",
                     "ROCE (%)",
+                    "Price Trend (1M | 6M | 1Y | 2Y)",
+                    "Promoter % (2Y Trend)",
+                    "FII % (2Y Trend)",
+                    "DII % (2Y Trend)",
                     "Evidence Type",
-                    "Risk Flags",
                 ]
             ],
             use_container_width=True,
             hide_index=True,
-            height=290,
+            height=300,
         )
 
     with tab2:
@@ -158,9 +185,15 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                     "Company",
                     "Exchange",
                     "Value Chain Segment",
-                    "Universe Tier",
+                    "CMP",
                     "Base AI Score (100)",
-                    "Evidence Type",
+                    "Fundamental Score (100)",
+                    "Technical Score (100)",
+                    "Analyst Rating",
+                    "Price Trend (1M | 6M | 1Y | 2Y)",
+                    "Promoter % (2Y Trend)",
+                    "FII % (2Y Trend)",
+                    "DII % (2Y Trend)",
                     "Risk Flags",
                 ]
             ],
@@ -183,11 +216,16 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                     "Exchange",
                     "Geography",
                     "Value Chain Segment",
+                    "CMP",
                     "Base AI Score (100)",
+                    "Fundamental Score (100)",
+                    "Technical Score (100)",
+                    "Analyst Score (100)",
+                    "Analyst Rating",
                     "Direct AI/DC Rev (%)",
                     "Trailing P/E",
                     "ROCE (%)",
-                    "Evidence Type",
+                    "Price Trend (1M | 6M | 1Y | 2Y)",
                 ]
             ],
             use_container_width=True,

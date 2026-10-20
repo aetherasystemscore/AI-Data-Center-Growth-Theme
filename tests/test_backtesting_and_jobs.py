@@ -13,7 +13,10 @@ from jobs.discover_new_listings import run_discover_new_listings
 from jobs.refresh_financials import run_refresh_financials
 from jobs.refresh_prices import run_refresh_prices
 from jobs.research_news import run_research_news
+from jobs.run_paper_trade_3pm import run_paper_trade_3pm_job
 from jobs.update_security_master import run_update_security_master
+from analytics.equity_enrichment import compute_enriched_equity_metrics, get_2y_quarterly_shareholding_and_price
+from portfolio.paper_trading import build_forward_horizon_kpi_table, ensure_paper_trading_ledger, run_5y_historical_verifiable_backtest
 
 
 def test_point_in_time_backtest_listing_date_guard_and_tx_costs(tmp_path) -> None:
@@ -94,3 +97,32 @@ def test_all_six_background_jobs_execute_and_log(tmp_path) -> None:
 
     runs = repo.get_recent_job_runs(limit=10)
     assert len(runs) == 6
+
+
+def test_equity_enrichment_and_3pm_paper_trading_and_5y_backtest(tmp_path) -> None:
+    repo = AI3Repository(db_path=tmp_path / "test_pt.db")
+    ingestion = DataIngestionService(repo=repo)
+    ingestion.ensure_bootstrapped()
+
+    dixon = repo.get_security_by_symbol("DIXON")
+    f_map = repo.get_latest_fundamentals_map()
+    enr = compute_enriched_equity_metrics(dixon, f_map.get("DIXON", {}))
+    assert enr["cmp"] > 0
+    assert 0 <= enr["fundamental_score"] <= 100
+    assert 0 <= enr["technical_score"] <= 100
+    assert 0 <= enr["analyst_score"] <= 100
+    assert "2Y" in enr["price_trend_summary"]
+    assert "2Y" in enr["promoter_trend"]
+
+    q_rows = get_2y_quarterly_shareholding_and_price(dixon, f_map.get("DIXON", {}))
+    assert len(q_rows) == 8
+
+    pt_res = run_paper_trade_3pm_job(repo=repo, force=True)
+    assert pt_res["status"] == "SUCCESS"
+    assert pt_res["positions_count"] >= 5
+
+    ledger = ensure_paper_trading_ledger(repo=repo, ingestion=ingestion)
+    bt_5y = run_5y_historical_verifiable_backtest(repo=repo, ingestion=ingestion)
+    assert len(bt_5y["interval_table"]) == 8  # 1W, 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y
+    fwd_rows = build_forward_horizon_kpi_table(ledger, bt_5y["interval_table"])
+    assert len(fwd_rows) == 8

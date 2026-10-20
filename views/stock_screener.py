@@ -16,6 +16,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from analytics.equity_enrichment import compute_enriched_equity_metrics
 from analytics.exposure_scoring import score_company_exposure
 from analytics.fundamentals import evaluate_fundamental_health
 from analytics.valuation import compute_valuation_metrics
@@ -27,7 +28,7 @@ from database.repository import AI3Repository
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.title("🔍 AI Infrastructure & Component Supply-Chain Screener")
     st.caption(
-        "Filter across all 8 value-chain categories, 8 scoring profiles, valuation percentiles, ROCE, and verified evidence types."
+        "Filter across all 8 value-chain categories, 8 scoring profiles, Fundamental/Technical/Analyst scores, 2Y Price & Ownership trends, and ROCE."
     )
 
     profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
@@ -74,6 +75,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         bd = score_company_exposure(sec, f, profile=profile)
         fh = evaluate_fundamental_health(f, sec)
         vm = compute_valuation_metrics(f)
+        enr = compute_enriched_equity_metrics(sec, f, profile=profile)
 
         is_inv = bool(sec["is_investable"]) and not bd.investability_blocked
         if tier_filter == "INVESTABLE_ONLY" and not is_inv:
@@ -106,13 +108,15 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "Company": sec["company_name"],
                 "Exchange": sec["exchange"],
                 "Primary Category": sec["primary_category"],
-                "Subcategories": ", ".join(sec.get("subcategories", [])),
-                "Investable": is_inv,
+                "CMP": enr["cmp"],
                 "AI Exposure Score": bd.total_score,
                 f"Profile ({profile})": bd.profile_adjusted_score,
+                "Fundamental Score": enr["fundamental_score"],
+                "Technical Score": enr["technical_score"],
+                "Analyst Score": enr["analyst_score"],
+                "Analyst Rating": enr["analyst_rating"],
                 "Direct AI/DC Rev (%)": f.get("direct_ai_dc_rev_share_pct"),
                 "3Y Rev CAGR (%)": f.get("rev_cagr_3y_pct"),
-                "5Y Rev CAGR (%)": f.get("rev_cagr_5y_pct"),
                 "ROCE (%)": roce,
                 "EBITDA Margin (%)": f.get("ebitda_margin_pct"),
                 "Debt/Equity": f.get("debt_to_equity"),
@@ -122,10 +126,13 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "EV/EBITDA": f.get("ev_ebitda"),
                 "PEG Ratio": f.get("peg_ratio"),
                 "FCF Yield (%)": vm.get("fcf_yield_pct"),
+                "Price Trend (1M | 6M | 1Y | 2Y)": enr["price_trend_summary"],
+                "Promoter % (2Y Trend)": enr["promoter_trend"],
+                "FII % (2Y Trend)": enr["fii_trend"],
+                "DII % (2Y Trend)": enr["dii_trend"],
                 "Daily Turnover (Rs Cr)": adv,
                 "Sector KPI": fh.get("sector_kpi_summary"),
                 "Evidence Type": bd.evidence_type.value,
-                "Newly Listed (<5Y)": fh.get("is_newly_listed"),
                 "Risk Flags": ", ".join(rf.code for rf in bd.risk_flags) if bd.risk_flags else "NONE",
             }
         )
@@ -159,8 +166,8 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             color="Primary Category",
             size="Daily Turnover (Rs Cr)",
             hover_name="Symbol",
-            hover_data=["Company", "Direct AI/DC Rev (%)", "ROCE (%)", "Evidence Type"],
-            height=450,
+            hover_data=["Company", "CMP", "Fundamental Score", "Technical Score", "Analyst Rating", "ROCE (%)"],
+            height=380,
         )
         st.plotly_chart(fig, use_container_width=True)
 
