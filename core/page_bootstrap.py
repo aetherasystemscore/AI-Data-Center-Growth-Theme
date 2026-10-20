@@ -1,4 +1,4 @@
-"""Shared Streamlit page bootstrapper, compact UI styling, top quick-navigation bar, and live host resource telemetry."""
+"""Shared Streamlit bootstrapper, compact UI styling, top-left navigation, and live host CPU/RAM telemetry."""
 
 from __future__ import annotations
 
@@ -15,19 +15,23 @@ from database.repository import AI3Repository
 
 _IN_NAVIGATION_RUNNER: bool = False
 
-NAV_ITEMS: list[tuple[str, str, str, str]] = [
-    ("pages/dashboard.py", "1. Dashboard", "📊", "dashboard"),
-    ("pages/stock_screener.py", "2. Screener", "🔍", "stock_screener"),
-    ("pages/company_research.py", "3. Company", "🏢", "company_research"),
-    ("pages/value_alternatives.py", "4. Value Alts", "💎", "value_alternatives"),
-    ("pages/etf_analysis.py", "5. ETFs", "📦", "etf_analysis"),
-    ("pages/smallcase_analysis.py", "6. Smallcases", "🧩", "smallcase_analysis"),
-    ("pages/ipo_tracker.py", "7. IPOs", "🚀", "ipo_tracker"),
-    ("pages/circular_electronics.py", "8. Circular", "♻️", "circular_electronics"),
-    ("pages/portfolio_builder.py", "9. Portfolio", "📐", "portfolio_builder"),
-    ("pages/backtesting.py", "10. Backtest", "📈", "backtesting"),
-    ("pages/settings.py", "11. Settings", "⚙️", "settings"),
+# Canonical ordered modules: (slug, sidebar_label, short_top_label)
+MODULES: list[tuple[str, str, str]] = [
+    ("dashboard", "📊 1. Executive Dashboard", "📊 1. Dashboard"),
+    ("stock_screener", "🔍 2. AI Value-Chain Screener", "🔍 2. Screener"),
+    ("company_research", "🏢 3. Deep Company Research", "🏢 3. Company"),
+    ("value_alternatives", "💎 4. Value Alternative Finder", "💎 4. Value Alts"),
+    ("etf_analysis", "📦 5. ETF Research & Overlap", "📦 5. ETFs"),
+    ("smallcase_analysis", "🧩 6. Smallcase & Look-Through", "🧩 6. Smallcases"),
+    ("ipo_tracker", "🚀 7. IPO, DRHP & New Listings", "🚀 7. IPOs"),
+    ("circular_electronics", "♻️ 8. Circular Electronics & E-Waste", "♻️ 8. Circular"),
+    ("portfolio_builder", "📐 9. Portfolio Builder & Optimiser", "📐 9. Portfolio"),
+    ("backtesting", "📈 10. Point-in-Time Backtesting", "📈 10. Backtest"),
+    ("settings", "⚙️ 11. Discovery Jobs & Host Specs", "⚙️ 11. Host/Jobs"),
 ]
+
+SLUG_TO_SIDEBAR_LABEL: dict[str, str] = {slug: s_label for slug, s_label, _ in MODULES}
+SIDEBAR_LABEL_TO_SLUG: dict[str, str] = {s_label: slug for slug, s_label, _ in MODULES}
 
 
 @st.cache_resource
@@ -40,77 +44,79 @@ def init_platform() -> tuple[AI3Repository, DataIngestionService]:
 
 
 def inject_compact_styles() -> None:
-    """Inject CSS to make the entire Streamlit view denser, more compact, and easier to scan."""
+    """Inject CSS to make the entire Streamlit view denser, more compact, and easier to navigate."""
     st.markdown(
         """
         <style>
+        /* Hide any residual built-in multipage sidebar list if ever present */
+        [data-testid="stSidebarNav"] {
+            display: none !important;
+        }
         /* Compact main container padding */
         .block-container {
-            padding-top: 1.1rem !important;
-            padding-bottom: 1.0rem !important;
+            padding-top: 1.0rem !important;
+            padding-bottom: 0.9rem !important;
             padding-left: 1.25rem !important;
             padding-right: 1.25rem !important;
             max-width: 100% !important;
         }
         /* Tighten vertical rhythm between Streamlit blocks */
         div[data-testid="stVerticalBlock"] > div {
-            gap: 0.38rem !important;
+            gap: 0.36rem !important;
         }
         /* Compact headings */
         h1 {
-            font-size: 1.32rem !important;
+            font-size: 1.30rem !important;
             line-height: 1.25 !important;
-            margin-top: 0.1rem !important;
-            margin-bottom: 0.15rem !important;
+            margin-top: 0.05rem !important;
+            margin-bottom: 0.12rem !important;
             padding-top: 0 !important;
         }
         h2 {
-            font-size: 1.06rem !important;
+            font-size: 1.04rem !important;
             line-height: 1.25 !important;
-            margin-top: 0.25rem !important;
-            margin-bottom: 0.15rem !important;
+            margin-top: 0.22rem !important;
+            margin-bottom: 0.12rem !important;
         }
         h3 {
-            font-size: 0.94rem !important;
+            font-size: 0.92rem !important;
             line-height: 1.25 !important;
-            margin-top: 0.2rem !important;
-            margin-bottom: 0.1rem !important;
+            margin-top: 0.18rem !important;
+            margin-bottom: 0.08rem !important;
         }
         hr {
-            margin-top: 0.35rem !important;
-            margin-bottom: 0.35rem !important;
+            margin-top: 0.32rem !important;
+            margin-bottom: 0.32rem !important;
         }
         /* Compact KPI metric cards */
         div[data-testid="stMetric"] {
             background-color: rgba(128, 128, 128, 0.05);
             border: 1px solid rgba(128, 128, 128, 0.18);
             border-radius: 6px;
-            padding: 0.32rem 0.55rem !important;
+            padding: 0.30rem 0.52rem !important;
         }
         div[data-testid="stMetricLabel"] p {
-            font-size: 0.72rem !important;
+            font-size: 0.71rem !important;
             margin-bottom: 0 !important;
         }
         div[data-testid="stMetricValue"] {
-            font-size: 1.10rem !important;
-            line-height: 1.2 !important;
+            font-size: 1.08rem !important;
+            line-height: 1.18 !important;
         }
         div[data-testid="stMetricDelta"] {
-            font-size: 0.68rem !important;
+            font-size: 0.67rem !important;
         }
-        /* Compact sidebar navigation items */
+        /* Compact sidebar layout so Navigation Module sits cleanly at top-left */
         section[data-testid="stSidebar"] .block-container {
-            padding-top: 0.75rem !important;
-            padding-bottom: 0.75rem !important;
+            padding-top: 0.65rem !important;
+            padding-bottom: 0.65rem !important;
+            padding-left: 0.85rem !important;
+            padding-right: 0.85rem !important;
         }
-        div[data-testid="stSidebarNav"] ul {
-            padding-top: 0.15rem !important;
-            padding-bottom: 0.15rem !important;
-        }
-        div[data-testid="stSidebarNav"] li a {
-            padding-top: 0.22rem !important;
-            padding-bottom: 0.22rem !important;
-            font-size: 0.84rem !important;
+        section[data-testid="stSidebar"] div[role="radiogroup"] label {
+            padding-top: 0.12rem !important;
+            padding-bottom: 0.12rem !important;
+            font-size: 0.83rem !important;
         }
         /* Compact top telemetry banner */
         .ai3-telemetry-strip {
@@ -118,20 +124,20 @@ def inject_compact_styles() -> None:
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.45rem;
-            padding: 0.32rem 0.65rem;
+            gap: 0.40rem;
+            padding: 0.30rem 0.60rem;
             border-radius: 6px;
             background: rgba(30, 41, 59, 0.06);
             border: 1px solid rgba(128, 128, 128, 0.22);
-            font-size: 0.76rem;
-            line-height: 1.3;
-            margin-bottom: 0.2rem;
+            font-size: 0.75rem;
+            line-height: 1.28;
+            margin-bottom: 0.15rem;
         }
         .ai3-telemetry-pill {
             display: inline-flex;
             align-items: center;
-            gap: 0.25rem;
-            padding: 0.1rem 0.42rem;
+            gap: 0.22rem;
+            padding: 0.08rem 0.40rem;
             border-radius: 4px;
             background: rgba(128, 128, 128, 0.10);
             font-weight: 500;
@@ -186,8 +192,16 @@ def render_host_specs_table(tel: dict) -> None:
     st.dataframe(pd.DataFrame(spec_rows), use_container_width=True, hide_index=True)
 
 
-def render_top_bar() -> None:
-    """Render a compact top telemetry bar + quick-jump module navigation strip across all pages."""
+def _switch_module_callback(target_slug: str) -> None:
+    """Update active module in session_state when a top quick-nav button is clicked."""
+    target_label = SLUG_TO_SIDEBAR_LABEL.get(target_slug)
+    if target_label:
+        st.session_state["ai3_nav_module_radio"] = target_label
+        st.session_state["ai3_active_module_slug"] = target_slug
+
+
+def render_top_bar(show_quick_nav: bool = True) -> None:
+    """Render a compact top telemetry bar + 1-click quick-jump module strip."""
     inject_compact_styles()
     tel = get_system_telemetry()
     settings = get_settings()
@@ -196,12 +210,12 @@ def render_top_bar() -> None:
     mem_used_gb = round(tel["effective_mem_used_mb"] / 1024.0, 2)
     mem_lim_gb = round(tel["effective_mem_limit_mb"] / 1024.0, 2)
 
-    top_left, top_right = st.columns([5.2, 1.3])
+    top_left, top_right = st.columns([5.3, 1.2])
     with top_left:
         st.markdown(
             f"""
             <div class="ai3-telemetry-strip">
-                <span><b>⚡ AI3 Terminal</b> &nbsp;|&nbsp; <span class="ai3-telemetry-pill">🖥️ {tel['hosting_provider']}</span></span>
+                <span><b>⚡ AI3</b> &nbsp;|&nbsp; <span class="ai3-telemetry-pill">🖥️ {tel['hosting_provider']}</span></span>
                 <span class="ai3-telemetry-pill">⚙️ CPU: {tel['effective_cpu_label']}{cpu_load_str}</span>
                 <span class="ai3-telemetry-pill">🧠 RAM: {tel['process_rss_mb']} MB App • {mem_used_gb}/{mem_lim_gb} GB ({tel['effective_mem_pct']}%)</span>
                 <span class="ai3-telemetry-pill">💾 Disk: {tel['disk_free_gb']} GB Free</span>
@@ -220,27 +234,52 @@ def render_top_bar() -> None:
             with st.expander("🖥️ Host Specs"):
                 render_host_specs_table(tel)
 
-    # Compact 1-click horizontal navigation bar across all 11 modules
-    if hasattr(st, "page_link"):
-        nav_cols = st.columns(len(NAV_ITEMS))
-        for col, (page_path, label, icon, _) in zip(nav_cols, NAV_ITEMS):
+    if show_quick_nav:
+        active_slug = st.session_state.get("ai3_active_module_slug", "dashboard")
+        nav_cols = st.columns(len(MODULES))
+        for col, (slug, _, short_label) in zip(nav_cols, MODULES):
             with col:
-                try:
-                    st.page_link(page_path, label=label, icon=icon, use_container_width=True)
-                except Exception:
-                    pass
+                btn_type = "primary" if slug == active_slug else "secondary"
+                st.button(
+                    short_label,
+                    key=f"top_quick_nav_{slug}",
+                    type=btn_type,
+                    use_container_width=True,
+                    on_click=_switch_module_callback,
+                    args=(slug,),
+                )
 
 
-def render_sidebar_controls() -> None:
-    """Render compact AI3 sidebar controls, scoring profile selector, and live host CPU/RAM telemetry."""
+def render_sidebar_controls() -> str:
+    """Render Navigation Module at the very top-left of the sidebar, followed by Scoring Profile & Host CPU/RAM details."""
     settings = get_settings()
     tel = get_system_telemetry()
+    sidebar_labels = [s_label for _, s_label, _ in MODULES]
+
+    # Sync from URL query param ?page=<slug> on first load if provided
+    if "ai3_nav_module_radio" not in st.session_state:
+        qp_page = None
+        if hasattr(st, "query_params"):
+            qp_page = st.query_params.get("page")
+        init_slug = qp_page if qp_page in SLUG_TO_SIDEBAR_LABEL else "dashboard"
+        st.session_state["ai3_nav_module_radio"] = SLUG_TO_SIDEBAR_LABEL[init_slug]
+
     with st.sidebar:
-        st.markdown("### ⚡ AI3 Intelligence")
+        st.markdown("### ⚡ AI3 Navigation")
+        selected_label = st.radio(
+            "Navigation Module",
+            options=sidebar_labels,
+            key="ai3_nav_module_radio",
+            label_visibility="collapsed",
+        )
+        selected_slug = SIDEBAR_LABEL_TO_SLUG.get(selected_label, "dashboard")
+        st.session_state["ai3_active_module_slug"] = selected_slug
+
+        st.divider()
         profile_options = [p.value for p in ScoringProfile]
         default_prof_idx = profile_options.index(ScoringProfile.DEFAULT_100PT.value)
         active_profile = st.selectbox(
-            "Scoring Profile",
+            "Active Scoring Profile",
             options=profile_options,
             index=default_prof_idx,
             key="ai3_active_scoring_profile_select",
@@ -249,28 +288,30 @@ def render_sidebar_controls() -> None:
         st.session_state["active_scoring_profile"] = active_profile
 
         with st.expander("🖥️ Host CPU & RAM Telemetry", expanded=True):
-            st.caption(f"**Env:** {tel['hosting_provider']}")
+            st.caption(f"**Host:** {tel['hosting_provider']}")
             st.caption(f"**CPU:** {tel['cpu_model'][:38]}")
             st.caption(
-                f"**Cores:** {tel['effective_cpu_label']}"
-                + (f" ({tel['cpu_usage_pct']}%)" if tel["cpu_usage_pct"] is not None else "")
+                f"**vCPUs:** {tel['effective_cpu_label']}"
+                + (f" ({tel['cpu_usage_pct']}% load)" if tel["cpu_usage_pct"] is not None else "")
             )
             st.caption(
                 f"**RAM ({tel['mem_scope']}):** {tel['effective_mem_used_mb']:.0f} / {tel['effective_mem_limit_mb']:.0f} MB ({tel['effective_mem_pct']}%)"
             )
             st.progress(min(1.0, max(0.0, tel["effective_mem_pct"] / 100.0)))
             st.caption(
-                f"**App Process RSS:** {tel['process_rss_mb']} MB  |  **Host RAM:** {tel['host_total_gb']} GB\n\n"
-                f"**Disk Free:** {tel['disk_free_gb']} GB / {tel['disk_total_gb']} GB  |  **OS:** {tel['os_platform']}"
+                f"**App RSS:** {tel['process_rss_mb']} MB | **Node RAM:** {tel['host_total_gb']} GB\n\n"
+                f"**Disk Free:** {tel['disk_free_gb']} / {tel['disk_total_gb']} GB | **OS:** {tel['os_platform']}"
             )
 
         st.caption(
-            f"**Mode:** `{settings.data_mode}` • Missing values kept `N/A` • Research tool only (not SEBI advice)."
+            f"**Data Mode:** `{settings.data_mode}` • Missing fields remain `N/A` • Research tool only."
         )
+
+    return selected_slug
 
 
 def run_standalone_page(render_fn: Callable[[AI3Repository, DataIngestionService], None]) -> None:
-    """Execute a page's render(repo, ingestion) function whether invoked via st.navigation or direct /<page> URL."""
+    """Execute a view's render(repo, ingestion) function when run directly."""
     if not _IN_NAVIGATION_RUNNER:
         try:
             st.set_page_config(
@@ -283,6 +324,6 @@ def run_standalone_page(render_fn: Callable[[AI3Repository, DataIngestionService
             pass
         render_sidebar_controls()
 
-    render_top_bar()
+    render_top_bar(show_quick_nav=False)
     repo, ingestion = init_platform()
     render_fn(repo, ingestion)
