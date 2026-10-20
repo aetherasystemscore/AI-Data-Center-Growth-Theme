@@ -34,7 +34,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         "single-stock and subsector concentration caps, Indian delivery transaction-cost estimates, and **6 stress scenarios**."
     )
 
-    profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
+    profile = st.session_state.get("active_scoring_profile", "HIGH_GROWTH_INFRA")
     all_secs = repo.get_securities(geography="INDIA", investable_only=True)
     f_map = repo.get_latest_fundamentals_map()
     sec_map = {s["symbol"]: s for s in repo.get_securities()}

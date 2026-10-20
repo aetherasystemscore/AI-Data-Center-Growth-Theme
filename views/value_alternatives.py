@@ -32,7 +32,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         "with Fundamental Score, Technical Score, Analyst Consensus, 2-Year Price Trend, and 2-Year Promoter/FII/DII Holding Trends."
     )
 
-    profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
+    profile = st.session_state.get("active_scoring_profile", "HIGH_GROWTH_INFRA")
     all_secs = repo.get_securities()
     f_map = repo.get_latest_fundamentals_map()
     sec_by_sym = {s["symbol"]: s for s in all_secs}

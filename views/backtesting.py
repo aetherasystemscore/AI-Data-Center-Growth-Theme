@@ -20,9 +20,10 @@ import streamlit as st
 
 from backtesting.engine import BacktestConfig, PointInTimeBacktestEngine
 from backtesting.walk_forward import run_walk_forward_validation
-from core.schemas import OptimisationMethod
+from core.schemas import OptimisationMethod, ScoringProfile
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
+from portfolio.paper_trading import rank_scoring_profiles_5y
 
 
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
@@ -81,6 +82,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         st.warning("Select at least 2 symbols to run the backtest.")
         return
 
+    active_profile = st.session_state.get("active_scoring_profile", ScoringProfile.HIGH_GROWTH_INFRA.value)
     engine = PointInTimeBacktestEngine(ingestion=ingestion)
     cfg = BacktestConfig(
         start_date=start_dt,
@@ -88,12 +90,17 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         initial_capital_inr=1_000_000.0,
         rebalance_frequency=reb_freq,
         optimisation_method=opt_method,
+        scoring_profile=active_profile,
         fundamental_lag_days=60,
         execute_at_next_open=True,
     )
 
     res = engine.run_backtest(symbols=selected_syms, config=cfg)
     m = res["metrics"]
+
+    with st.expander("🏆 5-Year Return Leaderboard Across All 9 Scoring Profiles (Why `HIGH_GROWTH_INFRA` is Default)", expanded=False):
+        prof_rank = rank_scoring_profiles_5y(repo=repo, ingestion=ingestion)
+        st.dataframe(pd.DataFrame(prof_rank["leaderboard"]), use_container_width=True, hide_index=True)
 
     for w in res["warnings"]:
         st.info(f"ℹ️ **Point-in-Time Guard:** {w}")

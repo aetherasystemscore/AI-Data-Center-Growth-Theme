@@ -16,7 +16,13 @@ from jobs.research_news import run_research_news
 from jobs.run_paper_trade_3pm import run_paper_trade_3pm_job
 from jobs.update_security_master import run_update_security_master
 from analytics.equity_enrichment import compute_enriched_equity_metrics, get_2y_quarterly_shareholding_and_price
-from portfolio.paper_trading import build_forward_horizon_kpi_table, ensure_paper_trading_ledger, run_5y_historical_verifiable_backtest
+from portfolio.paper_trading import (
+    build_forward_horizon_kpi_table,
+    ensure_paper_trading_ledger,
+    get_best_5y_scoring_profile,
+    rank_scoring_profiles_5y,
+    run_5y_historical_verifiable_backtest,
+)
 
 
 def test_point_in_time_backtest_listing_date_guard_and_tx_costs(tmp_path) -> None:
@@ -126,3 +132,12 @@ def test_equity_enrichment_and_3pm_paper_trading_and_5y_backtest(tmp_path) -> No
     assert len(bt_5y["interval_table"]) == 8  # 1W, 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y
     fwd_rows = build_forward_horizon_kpi_table(ledger, bt_5y["interval_table"])
     assert len(fwd_rows) == 8
+
+    ranked_profiles = rank_scoring_profiles_5y(repo=repo, ingestion=ingestion)
+    assert len(ranked_profiles["leaderboard"]) == 9
+    best_prof, best_metrics, lb = get_best_5y_scoring_profile(repo=repo, ingestion=ingestion)
+    assert best_prof == "HIGH_GROWTH_INFRA"
+    assert best_metrics["cagr_pct"] > 20.0
+    assert len(lb) == 9
+    assert bt_5y["best_5y_profile"] == "HIGH_GROWTH_INFRA"
+    assert ledger["scoring_profile"] == "HIGH_GROWTH_INFRA"

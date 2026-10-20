@@ -31,7 +31,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         "Filter across all 8 value-chain categories, 8 scoring profiles, Fundamental/Technical/Analyst scores, 2Y Price & Ownership trends, and ROCE."
     )
 
-    profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
+    profile = st.session_state.get("active_scoring_profile", "HIGH_GROWTH_INFRA")
     taxonomy = load_sector_taxonomy().get("categories", {})
     all_secs = repo.get_securities()
     f_map = repo.get_latest_fundamentals_map()

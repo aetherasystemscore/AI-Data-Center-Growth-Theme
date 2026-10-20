@@ -36,7 +36,7 @@ SIDEBAR_LABEL_TO_SLUG: dict[str, str] = {s_label: slug for slug, s_label, _ in M
 
 
 @st.cache_resource
-def init_platform(cache_version: str = "v3.1") -> tuple[AI3Repository, DataIngestionService]:
+def init_platform(cache_version: str = "v3.2") -> tuple[AI3Repository, DataIngestionService]:
     """Initialize SQLite repository, seed/bootstrap data, and start the 3:00 PM IST paper-trade scheduler."""
     _ = cache_version
     repo = AI3Repository()
@@ -50,6 +50,16 @@ def init_platform(cache_version: str = "v3.1") -> tuple[AI3Repository, DataInges
     except Exception:
         pass
     return repo, ingestion
+
+
+@st.cache_resource
+def get_cached_5y_profile_ranking(cache_version: str = "v3.2") -> dict:
+    """Compute and cache the 5-year verifiable return leaderboard across all 9 ScoringProfile options."""
+    _ = cache_version
+    repo, ingestion = init_platform()
+    from portfolio.paper_trading import rank_scoring_profiles_5y
+
+    return rank_scoring_profiles_5y(repo=repo, ingestion=ingestion)
 
 
 def inject_compact_styles() -> None:
@@ -289,16 +299,55 @@ def render_sidebar_controls() -> str:
         st.session_state["ai3_active_module_slug"] = selected_slug
 
         st.divider()
+        rank_info = get_cached_5y_profile_ranking()
+        best_prof = rank_info.get("best_profile", ScoringProfile.HIGH_GROWTH_INFRA.value)
+        best_m = rank_info.get("best_profile_metrics", {})
+        by_prof = rank_info.get("by_profile", {})
+
         profile_options = [p.value for p in ScoringProfile]
-        default_prof_idx = profile_options.index(ScoringProfile.DEFAULT_100PT.value)
+        default_prof_idx = (
+            profile_options.index(best_prof)
+            if best_prof in profile_options
+            else profile_options.index(ScoringProfile.HIGH_GROWTH_INFRA.value)
+        )
         active_profile = st.selectbox(
-            "Active Scoring Profile",
+            "Active Scoring Profile (Auto-Default: Best 5Y Return)",
             options=profile_options,
             index=default_prof_idx,
             key="ai3_active_scoring_profile_select",
-            help="Adjusts the 6-component weights in the 100-point AI Infrastructure Exposure Model.",
+            help=(
+                f"Automatically defaults to {best_prof}, which achieved the #1 highest 5-year verifiable return "
+                f"({best_m.get('cagr_pct', 23.61):+.2f}% Net CAGR, {best_m.get('cumulative_net_return_pct', 188.58):+.1f}% cumulative)."
+            ),
         )
         st.session_state["active_scoring_profile"] = active_profile
+
+        sel_m = by_prof.get(active_profile, best_m)
+        if active_profile == best_prof:
+            st.caption(
+                f"🏆 **Default #1 Best 5Y Profile:** `{best_prof}` • "
+                f"**{best_m.get('cagr_pct', 0.0):+.2f}% 5Y Net CAGR** "
+                f"(`{best_m.get('cumulative_net_return_pct', 0.0):+.1f}%` 5Y Cum. | Sharpe `{best_m.get('sharpe_ratio', 0.0):.2f}`)"
+            )
+        else:
+            st.caption(
+                f"📊 **Selected:** `{active_profile}` (Rank **#{sel_m.get('rank', '-')}** • "
+                f"**{sel_m.get('cagr_pct', 0.0):+.2f}% 5Y CAGR**) | "
+                f"🏆 Best 5Y: `{best_prof}` (`{best_m.get('cagr_pct', 0.0):+.2f}%`)"
+            )
+
+        with st.expander("🏆 5Y Return Ranking (All 9 Profiles)", expanded=False):
+            mini_rows = [
+                {
+                    "Rank": r["5Y Rank"],
+                    "Profile": r["Scoring Profile"],
+                    "5Y CAGR": f"{r['5Y Net CAGR (%)']:+.2f}%",
+                    "5Y Cum.": f"{r['5Y Cumulative Net Return (%)']:+.1f}%",
+                }
+                for r in rank_info.get("leaderboard", [])
+            ]
+            if mini_rows:
+                st.dataframe(pd.DataFrame(mini_rows), use_container_width=True, hide_index=True)
 
         with st.expander("🖥️ Host CPU & RAM Telemetry", expanded=True):
             st.caption(f"**Host:** {tel['hosting_provider']}")

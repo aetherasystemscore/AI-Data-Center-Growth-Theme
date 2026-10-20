@@ -9,9 +9,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from analytics.exposure_scoring import score_company_exposure
 from analytics.portfolio_optimisation import optimise_portfolio_weights
 from backtesting.metrics import compute_backtest_metrics, compute_rolling_returns
-from core.schemas import OptimisationMethod
+from core.schemas import OptimisationMethod, ScoringProfile
 from data.ingestion import DataIngestionService
 from portfolio.rebalancing import IndianTransactionCostConfig, estimate_trade_cost_inr
 
@@ -25,6 +26,7 @@ class BacktestConfig:
     initial_capital_inr: float = 1_000_000.0
     rebalance_frequency: str = "QUARTERLY"  # MONTHLY, QUARTERLY, SEMI_ANNUAL, ANNUAL
     optimisation_method: str = OptimisationMethod.CONVICTION_WEIGHT.value
+    scoring_profile: str = ScoringProfile.DEFAULT_100PT.value
     fundamental_lag_days: int = 60  # 60-90 day lag after reporting period before fundamentals are tradable
     execute_at_next_open: bool = True  # Signal at close(t), execute at open(t+1)
     max_single_stock_pct: float = 12.0
@@ -38,6 +40,7 @@ class PointInTimeBacktestEngine:
     def __init__(self, ingestion: DataIngestionService | None = None) -> None:
         self.ingestion = ingestion or DataIngestionService()
         self.repo = self.ingestion.repo
+        self._series_cache: dict[tuple[str, date, date], tuple[pd.Series | None, pd.Series | None, list[str]]] = {}
 
     @staticmethod
     def is_security_eligible_at_date(
@@ -91,19 +94,31 @@ class PointInTimeBacktestEngine:
         warnings: list[str] = []
 
         for sym in clean_syms:
-            res = self.ingestion.get_or_generate_price_history(
-                symbol=sym,
-                start_date=config.start_date,
-                end_date=config.end_date,
-            )
-            df = res.get("df")
-            if df is not None and not df.empty:
-                df_sorted = df.sort_values("trade_date")
-                idx = pd.to_datetime(df_sorted["trade_date"])
-                close_dict[sym] = pd.Series(df_sorted["close"].astype(float).values, index=idx)
-                open_dict[sym] = pd.Series(df_sorted["open"].astype(float).values, index=idx)
+            cache_key = (sym, config.start_date, config.end_date)
+            if cache_key in self._series_cache:
+                c_ser, o_ser, w_list = self._series_cache[cache_key]
             else:
-                warnings.extend(res.get("warnings", []))
+                res = self.ingestion.get_or_generate_price_history(
+                    symbol=sym,
+                    start_date=config.start_date,
+                    end_date=config.end_date,
+                )
+                df = res.get("df")
+                w_list = list(res.get("warnings", []))
+                if df is not None and not df.empty:
+                    df_sorted = df.sort_values("trade_date")
+                    idx = pd.to_datetime(df_sorted["trade_date"])
+                    c_ser = pd.Series(df_sorted["close"].astype(float).values, index=idx)
+                    o_ser = pd.Series(df_sorted["open"].astype(float).values, index=idx)
+                else:
+                    c_ser, o_ser = None, None
+                self._series_cache[cache_key] = (c_ser, o_ser, w_list)
+
+            if c_ser is not None and o_ser is not None:
+                close_dict[sym] = c_ser
+                open_dict[sym] = o_ser
+            else:
+                warnings.extend(w_list)
 
         if not close_dict:
             raise ValueError("No price history available in the selected date window.")
@@ -142,10 +157,10 @@ class PointInTimeBacktestEngine:
         rebalance_log: list[dict[str, Any]] = []
         skipped_pre_listing: set[str] = set()
 
-        scores_map = {
-            s: float((f_map.get(s, {}).get("direct_ai_dc_rev_share_pct") or 10.0) + 50.0)
-            for s in clean_syms
-        }
+        scores_map: dict[str, float] = {}
+        for s in clean_syms:
+            bd = score_company_exposure(sec_map[s], f_map.get(s, {}), profile=config.scoring_profile)
+            scores_map[s] = float(bd.profile_adjusted_score)
         mcaps_map = {s: float(f_map.get(s, {}).get("market_cap_inr_cr") or 10000.0) for s in clean_syms}
         cat_map = {s: sec_map[s].get("primary_category", "OTHER") for s in clean_syms}
         adv_map = {s: float(f_map.get(s, {}).get("avg_daily_turnover_inr_cr") or 20.0) for s in clean_syms}
@@ -216,15 +231,36 @@ class PointInTimeBacktestEngine:
                         else:
                             pending_target_weights = {s: 100.0 / len(eligible_syms) for s in eligible_syms}
                     else:
-                        hist_window = close_df.iloc[max(0, t - 126) : t + 1][eligible_syms].pct_change().dropna(how="all")
+                        opt_syms = list(eligible_syms)
+                        eff_max_single = config.max_single_stock_pct
+                        if (
+                            config.optimisation_method.upper()
+                            in (OptimisationMethod.CONVICTION_WEIGHT.value, "CONVICTION_WEIGHTED")
+                            and len(eligible_syms) >= 8
+                        ):
+                            keep_k = max(8, int(round(len(eligible_syms) * 0.65)))
+                            opt_syms = [
+                                s
+                                for s, _ in sorted(
+                                    [(sym, scores_map.get(sym, 50.0)) for sym in eligible_syms],
+                                    key=lambda item: (item[1], item[0]),
+                                    reverse=True,
+                                )[:keep_k]
+                            ]
+                            eff_max_single = max(
+                                config.max_single_stock_pct,
+                                round((100.0 / max(1, len(opt_syms))) + 3.0, 2),
+                            )
+
+                        hist_window = close_df.iloc[max(0, t - 126) : t + 1][opt_syms].pct_change().dropna(how="all")
                         pending_target_weights = optimise_portfolio_weights(
-                            symbols=eligible_syms,
+                            symbols=opt_syms,
                             method=config.optimisation_method,
                             returns_df=hist_window if len(hist_window) >= 20 else None,
                             conviction_scores=scores_map,
                             market_caps=mcaps_map,
                             category_map=cat_map,
-                            max_single_stock_pct=config.max_single_stock_pct,
+                            max_single_stock_pct=eff_max_single,
                             max_subsector_pct=config.max_subsector_pct,
                         )
 

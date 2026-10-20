@@ -17,6 +17,7 @@ from analytics.equity_enrichment import compute_enriched_equity_metrics
 from analytics.exposure_scoring import score_company_exposure
 from analytics.portfolio_optimisation import optimise_portfolio_weights
 from backtesting.engine import BacktestConfig, PointInTimeBacktestEngine
+from core.schemas import ScoringProfile
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
 from portfolio.rebalancing import estimate_trade_cost_inr
@@ -90,9 +91,125 @@ def next_3pm_ist_slot(now_ist: datetime | None = None) -> str:
     return f"{d.isoformat()} 15:00:00 IST"
 
 
+_PROFILE_RANKING_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def rank_scoring_profiles_5y(
+    repo: AI3Repository,
+    ingestion: DataIngestionService,
+    end_date: date | None = None,
+    initial_capital_inr: float = 1_000_000.0,
+) -> dict[str, Any]:
+    """Evaluate all 9 ScoringProfile options over the last 5 years and rank them by 5Y Net Return / CAGR."""
+    end_dt = end_date or date.today()
+    while not is_working_day(end_dt):
+        end_dt -= timedelta(days=1)
+    start_dt = date(end_dt.year - 5, end_dt.month, min(end_dt.day, 28))
+
+    cache_key = f"{getattr(repo, 'db_path', 'default')}::{start_dt.isoformat()}::{end_dt.isoformat()}"
+    if cache_key in _PROFILE_RANKING_CACHE:
+        return _PROFILE_RANKING_CACHE[cache_key]
+
+    all_secs = repo.get_securities(geography="INDIA", investable_only=True)
+    avail_syms = [s["symbol"] for s in all_secs]
+    bt_syms = [s for s in DEFAULT_PAPER_BASKET if s in avail_syms]
+    if len(bt_syms) < 5:
+        bt_syms = avail_syms
+
+    engine = PointInTimeBacktestEngine(ingestion=ingestion)
+    raw_rows: list[dict[str, Any]] = []
+
+    for prof in ScoringProfile:
+        cfg = BacktestConfig(
+            start_date=start_dt,
+            end_date=end_dt,
+            initial_capital_inr=initial_capital_inr,
+            rebalance_frequency="QUARTERLY",
+            optimisation_method="CONVICTION_WEIGHTED",
+            scoring_profile=prof.value,
+            max_single_stock_pct=10.0,
+            max_subsector_pct=30.0,
+            fundamental_lag_days=60,
+            execute_at_next_open=True,
+        )
+        res = engine.run_backtest(symbols=bt_syms, config=cfg)
+        m = res["metrics"]
+        net_nav = res["net_nav_series"]
+        final_net = round(float(net_nav.iloc[-1]), 2) if not net_nav.empty else initial_capital_inr
+        cum_ret_pct = round(((final_net / max(1.0, initial_capital_inr)) - 1.0) * 100.0, 2)
+        top_syms = list(
+            dict(sorted(res.get("final_weights", {}).items(), key=lambda x: x[1], reverse=True)[:4]).keys()
+        )
+        raw_rows.append(
+            {
+                "profile": prof.value,
+                "cagr_pct": round(float(m.get("cagr_pct", 0.0)), 2),
+                "gross_cagr_pct": round(float(m.get("gross_cagr_pct", 0.0)), 2),
+                "cumulative_net_return_pct": cum_ret_pct,
+                "final_net_nav_inr": final_net,
+                "benchmark_cagr_pct": round(float(m.get("benchmark_cagr_pct") or 0.0), 2),
+                "active_alpha_cagr_pct": round(float(m.get("active_return_cagr_pct") or 0.0), 2),
+                "sharpe_ratio": round(float(m.get("sharpe_ratio", 0.0)), 2),
+                "sortino_ratio": round(float(m.get("sortino_ratio", 0.0)), 2),
+                "max_drawdown_pct": round(float(m.get("max_drawdown_pct", 0.0)), 2),
+                "calmar_ratio": round(float(m.get("calmar_ratio", 0.0)), 2),
+                "top_holdings": ", ".join(top_syms),
+            }
+        )
+
+    raw_rows.sort(
+        key=lambda r: (r["cagr_pct"], r["cumulative_net_return_pct"], r["sharpe_ratio"]),
+        reverse=True,
+    )
+
+    leaderboard: list[dict[str, Any]] = []
+    for idx, r in enumerate(raw_rows, start=1):
+        leaderboard.append(
+            {
+                "5Y Rank": f"#{idx}" + (" 🏆" if idx == 1 else ""),
+                "Scoring Profile": r["profile"],
+                "5Y Net CAGR (%)": r["cagr_pct"],
+                "5Y Cumulative Net Return (%)": r["cumulative_net_return_pct"],
+                "Rs 10L Final Net Value (Rs)": f"Rs {r['final_net_nav_inr']:,.0f}",
+                "5Y Gross CAGR (%)": r["gross_cagr_pct"],
+                "Active Alpha vs Benchmark (%/yr)": r["active_alpha_cagr_pct"],
+                "Sharpe Ratio": r["sharpe_ratio"],
+                "Sortino Ratio": r["sortino_ratio"],
+                "Max Drawdown (%)": r["max_drawdown_pct"],
+                "Calmar Ratio": r["calmar_ratio"],
+                "Top Conviction Holdings": r["top_holdings"],
+                "Default Status": "🏆 DEFAULT (Best 5Y Return)" if idx == 1 else f"Rank #{idx} Option",
+            }
+        )
+
+    best_row = raw_rows[0]
+    out = {
+        "best_profile": best_row["profile"],
+        "best_profile_metrics": best_row,
+        "leaderboard": leaderboard,
+        "by_profile": {r["profile"]: {**r, "rank": i + 1} for i, r in enumerate(raw_rows)},
+        "start_date": start_dt.isoformat(),
+        "end_date": end_dt.isoformat(),
+    }
+    _PROFILE_RANKING_CACHE[cache_key] = out
+    return out
+
+
+def get_best_5y_scoring_profile(
+    repo: AI3Repository | None = None,
+    ingestion: DataIngestionService | None = None,
+) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+    """Return (best_profile_name, best_profile_metrics, leaderboard) over the last 5 years."""
+    repo_inst = repo or AI3Repository()
+    ing_inst = ingestion or DataIngestionService(repo=repo_inst)
+    ing_inst.ensure_bootstrapped()
+    res = rank_scoring_profiles_5y(repo=repo_inst, ingestion=ing_inst)
+    return res["best_profile"], res["best_profile_metrics"], res["leaderboard"]
+
+
 def _compute_composite_conviction_weights(
     repo: AI3Repository,
-    profile: str = "DEFAULT_100PT",
+    profile: str = ScoringProfile.HIGH_GROWTH_INFRA.value,
     max_single_stock_pct: float = 10.0,
     max_subsector_pct: float = 30.0,
 ) -> tuple[dict[str, float], dict[str, dict[str, Any]]]:
@@ -140,16 +257,24 @@ def ensure_paper_trading_ledger(
     ingestion: DataIngestionService,
     initial_capital_inr: float = 1_000_000.0,
     force_run_today: bool = False,
+    scoring_profile: str | None = None,
 ) -> dict[str, Any]:
     """Load or initialize the forward 3:00 PM IST paper-trading ledger starting from today onwards."""
     PAPER_LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
     now_ist = get_ist_now()
     slot_date, slot_ts = latest_3pm_ist_slot(now_ist)
+    rank_info = rank_scoring_profiles_5y(repo=repo, ingestion=ingestion)
+    active_prof = scoring_profile or rank_info["best_profile"]
 
     if PAPER_LEDGER_PATH.exists() and not force_run_today:
         try:
             ledger = json.loads(PAPER_LEDGER_PATH.read_text(encoding="utf-8"))
-            if ledger.get("positions") and ledger.get("nav_history"):
+            if (
+                ledger.get("positions")
+                and ledger.get("nav_history")
+                and ledger.get("active_scoring_profile") == active_prof
+            ):
+                ledger["scoring_profile"] = active_prof
                 # Update mark-to-market if a new working day 3 PM IST slot has arrived
                 last_recorded = ledger["nav_history"][-1]["date"]
                 if last_recorded < slot_date.isoformat():
@@ -159,8 +284,8 @@ def ensure_paper_trading_ledger(
         except Exception:
             pass
 
-    # Initialize fresh paper-trading book from today's 3:00 PM IST slot
-    weights, enr_map = _compute_composite_conviction_weights(repo)
+    # Initialize fresh paper-trading book from today's 3:00 PM IST slot using the active/best 5Y profile
+    weights, enr_map = _compute_composite_conviction_weights(repo, profile=active_prof)
     all_secs = {s["symbol"]: s for s in repo.get_securities()}
     f_map = repo.get_latest_fundamentals_map()
 
@@ -241,6 +366,10 @@ def ensure_paper_trading_ledger(
 
     ledger = {
         "strategy_name": "AI3 Conviction-Weighted Daily 3:00 PM IST Paper-Trading Book",
+        "scoring_profile": active_prof,
+        "active_scoring_profile": active_prof,
+        "best_5y_scoring_profile": rank_info["best_profile"],
+        "best_5y_cagr_pct": rank_info["best_profile_metrics"]["cagr_pct"],
         "execution_schedule": "Every NSE/BSE Working Day (Mon–Fri) at 15:00:00 IST (3:00 PM IST)",
         "inception_date": slot_date.isoformat(),
         "inception_timestamp_ist": slot_ts,
@@ -340,12 +469,21 @@ def run_5y_historical_verifiable_backtest(
     ingestion: DataIngestionService,
     end_date: date | None = None,
     initial_capital_inr: float = 1_000_000.0,
+    scoring_profile: str | None = None,
 ) -> dict[str, Any]:
     """Run the 5-Year Historical Verifiable Backtest of the 3:00 PM IST strategy logic."""
     end_dt = end_date or date.today()
     while not is_working_day(end_dt):
         end_dt -= timedelta(days=1)
     start_dt = date(end_dt.year - 5, end_dt.month, min(end_dt.day, 28))
+
+    rank_info = rank_scoring_profiles_5y(
+        repo=repo,
+        ingestion=ingestion,
+        end_date=end_dt,
+        initial_capital_inr=initial_capital_inr,
+    )
+    active_prof = scoring_profile or rank_info["best_profile"]
 
     all_secs = repo.get_securities(geography="INDIA", investable_only=True)
     avail_syms = [s["symbol"] for s in all_secs]
@@ -360,6 +498,7 @@ def run_5y_historical_verifiable_backtest(
         initial_capital_inr=initial_capital_inr,
         rebalance_frequency="QUARTERLY",
         optimisation_method="CONVICTION_WEIGHTED",
+        scoring_profile=active_prof,
         max_single_stock_pct=10.0,
         max_subsector_pct=30.0,
         fundamental_lag_days=60,
@@ -495,6 +634,8 @@ def run_5y_historical_verifiable_backtest(
 
     summary_kpis = {
         **base_metrics,
+        "scoring_profile": active_prof,
+        "best_5y_scoring_profile": rank_info["best_profile"],
         "start_date": start_dt.isoformat(),
         "end_date": end_dt.isoformat(),
         "initial_capital_inr": initial_capital_inr,
@@ -510,6 +651,9 @@ def run_5y_historical_verifiable_backtest(
 
     return {
         "summary_kpis": summary_kpis,
+        "profile_leaderboard": rank_info["leaderboard"],
+        "best_5y_profile": rank_info["best_profile"],
+        "best_5y_profile_metrics": rank_info["best_profile_metrics"],
         "interval_table": interval_rows,
         "annual_table": annual_rows,
         "net_nav_series": net_nav,

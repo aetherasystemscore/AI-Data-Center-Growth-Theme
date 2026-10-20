@@ -153,8 +153,9 @@ def optimise_portfolio_weights(
     if method_u == OptimisationMethod.EQUAL_WEIGHT.value:
         raw = np.ones(n) / n
 
-    elif method_u == OptimisationMethod.CONVICTION_WEIGHT.value:
-        raw = np.array([scores[s] ** 1.35 for s in clean_syms])
+    elif method_u in (OptimisationMethod.CONVICTION_WEIGHT.value, "CONVICTION_WEIGHTED"):
+        min_sc = min(scores.values()) if scores else 0.0
+        raw = np.array([max(1.5, (scores[s] - min_sc + 4.0)) ** 2.65 for s in clean_syms], dtype=float)
 
     elif method_u == OptimisationMethod.INVERSE_VOLATILITY.value:
         vols = np.sqrt(np.maximum(1e-6, np.diag(cov_mat)))

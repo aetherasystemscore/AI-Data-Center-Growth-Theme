@@ -29,7 +29,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         "Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics, IPO & Daily 3 PM IST Paper-Trading Platform"
     )
 
-    profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
+    profile = st.session_state.get("active_scoring_profile", "HIGH_GROWTH_INFRA")
     all_secs = repo.get_securities()
     f_map = repo.get_latest_fundamentals_map()
     etfs = repo.get_etfs()

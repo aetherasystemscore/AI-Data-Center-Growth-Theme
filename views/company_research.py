@@ -53,7 +53,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             format_func=lambda s: f"{s} — {sec_by_sym[s]['company_name']} ({sec_by_sym[s]['exchange']})",
         )
     with col_sel2:
-        profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
+        profile = st.session_state.get("active_scoring_profile", "HIGH_GROWTH_INFRA")
         st.metric("Active Scoring Profile", profile)
 
     sec = sec_by_sym[symbol]

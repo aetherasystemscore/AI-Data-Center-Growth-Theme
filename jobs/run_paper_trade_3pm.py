@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
 from portfolio.paper_trading import ensure_paper_trading_ledger, get_ist_now, is_working_day
 
 
-def run_paper_trade_3pm_job(repo: AI3Repository | None = None, force: bool = False) -> dict[str, Any]:
+def run_paper_trade_3pm_job(
+    repo: AI3Repository | None = None,
+    force: bool = False,
+    scoring_profile: str | None = None,
+) -> dict[str, Any]:
     """Execute the daily 3:00 PM IST working-day paper-trading mark-to-market and rebalance check."""
     repository = repo or AI3Repository()
     ingestion = DataIngestionService(repo=repository)
@@ -23,7 +33,12 @@ def run_paper_trade_3pm_job(repo: AI3Repository | None = None, force: bool = Fal
         repository.log_job_finish(job_id, status="SKIPPED_WEEKEND", records_processed=0, details=msg)
         return {"job_id": job_id, "status": "SKIPPED_WEEKEND", "message": msg}
 
-    ledger = ensure_paper_trading_ledger(repo=repository, ingestion=ingestion, force_run_today=force)
+    ledger = ensure_paper_trading_ledger(
+        repo=repository,
+        ingestion=ingestion,
+        force_run_today=force,
+        scoring_profile=scoring_profile,
+    )
     positions_count = len(ledger.get("positions", []))
     net_nav = ledger.get("current_net_nav_inr", 1_000_000.0)
     msg = (

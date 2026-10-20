@@ -271,18 +271,65 @@ def score_company_exposure(
     weights = SCORING_PROFILE_WEIGHTS.get(profile, SCORING_PROFILE_WEIGHTS[ScoringProfile.DEFAULT_100PT.value])
     profile_score = sum(norm_components[k] * w for k, w in weights.items())
 
-    # Apply bonus/tilt for specialized profiles
-    if profile == ScoringProfile.CIRCULAR_ECONOMY_FOCUS.value:
-        if "H_CIRCULAR_ELECTRONICS" in sec.get("sector_tags", []):
-            profile_score = min(100.0, profile_score + 12.0)
+    # Apply specialized factor tilts across the 9 ScoringProfile options
+    rev_cagr_3y = float(f.get("rev_cagr_3y_pct") or 0.0)
+    pat_cagr_3y = float(f.get("pat_cagr_3y_pct") or 0.0)
+    t_pe = f.get("trailing_pe")
+    peg = f.get("peg_ratio")
+
+    if profile == ScoringProfile.HIGH_GROWTH_INFRA.value:
+        growth_signal = (rev_cagr_3y * 0.65) + (pat_cagr_3y * 0.35)
+        profile_score = (profile_score * 0.45) + min(55.0, growth_signal * 1.15)
+        if sec.get("primary_category") in ("C_DATACENTRE_INFRA", "A_COMPUTE_HARDWARE", "B_ELECTRONIC_COMPONENTS"):
+            profile_score += 11.0
+        if (ebitda_m or 0.0) >= 18.0 and (roce or 0.0) >= 26.0:
+            profile_score += 8.5
+        if (ebitda_m or 15.0) < 12.0 or rev_cagr_3y < 17.0:
+            profile_score -= 16.0
     elif profile == ScoringProfile.SMALL_CAP_SUPPLIERS.value:
-        if 500.0 <= mcap <= 25000.0 and sec.get("primary_category") in ("B_ELECTRONIC_COMPONENTS", "D_POWER_AND_GRID", "E_COOLING_THERMAL"):
-            profile_score = min(100.0, profile_score + 6.0)
+        if 500.0 <= mcap <= 32000.0 and sec.get("primary_category") in (
+            "B_ELECTRONIC_COMPONENTS",
+            "D_POWER_AND_GRID",
+            "E_COOLING_THERMAL",
+            "A_COMPUTE_HARDWARE",
+        ):
+            profile_score += 10.5
+        elif mcap > 65000.0:
+            profile_score -= 9.5
+    elif profile == ScoringProfile.CONSERVATIVE_QUALITY.value:
+        if (roce or 0.0) >= 22.0 and (d_to_e is not None and d_to_e <= 0.45):
+            profile_score += 7.5
+        if t_pe is not None and t_pe > 75.0:
+            profile_score -= 7.0
+    elif profile == ScoringProfile.BALANCED_GARP.value:
+        if peg is not None and 0.4 <= peg <= 2.3 and (roce or 0.0) >= 18.0:
+            profile_score += 8.0
+        elif t_pe is not None and t_pe > 85.0:
+            profile_score -= 6.5
+    elif profile == ScoringProfile.VALUE_CONTRARIAN.value:
+        if t_pe is not None and t_pe <= 38.0:
+            profile_score += 11.0
+        elif t_pe is not None and t_pe >= 65.0:
+            profile_score -= 10.5
+    elif profile == ScoringProfile.LOW_VOLATILITY_DEFENSIVE.value:
+        if mcap >= 35000.0 and (d_to_e is None or d_to_e <= 1.3):
+            profile_score += 9.5
+        elif mcap < 15000.0:
+            profile_score -= 8.5
+    elif profile == ScoringProfile.CIRCULAR_ECONOMY_FOCUS.value:
+        if "H_CIRCULAR_ELECTRONICS" in sec.get("sector_tags", []):
+            profile_score += 14.0
+        elif sec.get("primary_category") in ("E_COOLING_THERMAL", "D_POWER_AND_GRID") and (cfo_ebitda or 0.0) >= 75.0:
+            profile_score += 5.0
     elif profile == ScoringProfile.IPO_NEW_LISTING.value:
         if f.get("rev_cagr_5y_pct") is None and f.get("rev_cagr_3y_pct") is not None:
-            profile_score = min(100.0, profile_score + 8.0)
+            profile_score += 9.5
+        elif str(sec.get("listing_date") or "") >= "2022-01-01":
+            profile_score += 6.0
+        else:
+            profile_score -= 4.0
 
-    profile_score = round(profile_score, 2)
+    profile_score = round(max(0.0, min(100.0, profile_score)), 2)
 
     # Mandatory Risk Flags
     risk_flags = evaluate_company_risk_flags(sec=sec, f=f, is_narrative_only=is_narrative_only)
