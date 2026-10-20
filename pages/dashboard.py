@@ -24,8 +24,8 @@ from database.repository import AI3Repository
 
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.title("⚡ AI Infrastructure Investment Intelligence (AI3)")
-    st.markdown(
-        "**Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics & IPO Research Platform**"
+    st.caption(
+        "Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics & IPO Research Platform"
     )
 
     profile = st.session_state.get("active_scoring_profile", "DEFAULT_100PT")
@@ -93,7 +93,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 color_continuous_scale="Viridis",
                 hover_data=["Company", "Direct AI/DC Rev (%)", "Trailing P/E", "ROCE (%)", "Evidence Type"],
             )
-            fig_tree.update_layout(margin=dict(t=20, l=10, r=10, b=10), height=420)
+            fig_tree.update_layout(margin=dict(t=15, l=5, r=5, b=5), height=320)
             st.plotly_chart(fig_tree, use_container_width=True)
 
     with right_col:
@@ -111,7 +111,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         cat_summary["Avg_AI_Score"] = cat_summary["Avg_AI_Score"].round(1)
         cat_summary["Median_PE"] = cat_summary["Median_PE"].round(1)
         cat_summary["Median_ROCE"] = cat_summary["Median_ROCE"].round(1)
-        st.dataframe(cat_summary, use_container_width=True, hide_index=True)
+        st.dataframe(cat_summary, use_container_width=True, hide_index=True, height=320)
 
     st.divider()
     tab1, tab2, tab3 = st.tabs(
@@ -142,6 +142,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             ],
             use_container_width=True,
             hide_index=True,
+            height=290,
         )
 
     with tab2:
@@ -165,6 +166,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             ],
             use_container_width=True,
             hide_index=True,
+            height=240,
         )
 
     with tab3:
@@ -190,6 +192,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             ],
             use_container_width=True,
             hide_index=True,
+            height=260,
         )
 
 

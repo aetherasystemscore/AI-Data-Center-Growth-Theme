@@ -86,6 +86,22 @@ pytest -v
 
 ---
 
+---
+
+## 🖥️ Hosting Infrastructure, CPU, RAM & Live Resource Telemetry
+
+The live app (https://ai-data-center-growth-theme-47pnyp6sud4jqeryhxbx2g.streamlit.app/) includes a built-in **Real-Time Host & Container Resource Telemetry Engine** (core/system_telemetry.py) visible in the **Top Telemetry Bar**, **Sidebar Telemetry Card**, and **Tab 11 (Jobs & Host Telemetry)**:
+
+| Resource Dimension | Streamlit Community Cloud Container Allocation | Runtime Telemetry Source |
+| :--- | :--- | :--- |
+| **Hosting Platform** | Streamlit Community Cloud (Kubernetes Linux Pod on GCP/AWS) | STREAMLIT_SHARING_MODE, /mount/src, hostname |
+| **CPU Allocation** | Shared Cloud vCPUs (~1–2 vCPU container quota on Xeon / EPYC node) | /proc/cpuinfo, /sys/fs/cgroup/cpu.max, psutil |
+| **Memory (RAM)** | ~1.0 GB – 2.7 GB Container Cgroup Limit (memory.max) + App Process RSS (~140–240 MB) | /sys/fs/cgroup/memory.max, /proc/self/status (VmRSS), psutil |
+| **Storage & DB** | Ephemeral Container SSD (~20–50 GB free) + Embedded SQLite (i3_research.db) | shutil.disk_usage, SQLite file stat |
+| **Runtime** | Python 3.11+ / Linux Debian container (x86_64) | platform.system(), sys.version |
+
+---
+
 ## 📚 Documentation
 - [System Architecture & 28-Table Schema](docs/architecture.md)
 - [Data Sources, Provenance & Adapters](docs/data_sources.md)

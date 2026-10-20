@@ -1,4 +1,4 @@
-"""Page 11: Discovery Queue, Automated Refresh Jobs & Platform Settings (Section 17 & 18 of Master Prompt)."""
+"""Page 11: Discovery Queue, Automated Refresh Jobs, Host Resource Telemetry & Platform Settings."""
 
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ import streamlit as st
 
 from ai.research_summariser import get_active_ai_provider
 from core.config import get_settings
+from core.page_bootstrap import render_host_specs_table
 from core.security_master import SecurityMasterService
+from core.system_telemetry import get_system_telemetry
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
 from jobs.discover_ipos import run_discover_ipos
@@ -29,72 +31,84 @@ from jobs.update_security_master import run_update_security_master
 
 
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
-    st.title("⚙️ Discovery Engine, Automated Jobs, Security Master & AI Settings")
+    st.title("⚙️ Discovery Engine, Automated Jobs, Security Master & Host Telemetry")
 
     settings = get_settings()
     ai_prov = get_active_ai_provider()
+    tel = get_system_telemetry()
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Active Data Mode", settings.data_mode)
-    c2.metric("Active AI Provider", ai_prov.provider_name)
-    c3.metric("SQLite Database Path", str(settings.sqlite_db_path.name))
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Host Environment", tel["hosting_provider"].split("(")[0].strip(), tel["os_platform"].split()[0])
+    c2.metric(
+        "CPU Allocation",
+        tel["effective_cpu_label"],
+        f"{tel['cpu_usage_pct']}% Load" if tel["cpu_usage_pct"] is not None else tel["cpu_model"][:22],
+    )
+    c3.metric(
+        f"RAM ({tel['mem_scope']})",
+        f"{tel['effective_mem_used_mb']:.0f} / {tel['effective_mem_limit_mb']:.0f} MB",
+        f"{tel['effective_mem_pct']}% Utilised",
+    )
+    c4.metric("App Process RSS", f"{tel['process_rss_mb']} MB", f"Host RAM: {tel['host_total_gb']} GB")
+    c5.metric("Disk Available", f"{tel['disk_free_gb']} GB Free", f"{tel['disk_pct']}% of {tel['disk_total_gb']} GB")
+    c6.metric("Data Mode & DB", settings.data_mode, f"SQLite {tel['sqlite_db_kb']} KB • {ai_prov.provider_name}")
 
     st.divider()
+    with st.expander("🖥️ Detailed Hosting Infrastructure, CPU, RAM & Container Specifications", expanded=True):
+        render_host_specs_table(tel)
+
     st.subheader("1. Automated Discovery & Refresh Jobs")
     st.caption(
         "Execute any of the 6 background discovery and data-validation jobs on demand. Every job logs its execution to `job_runs`."
     )
 
     jb1, jb2, jb3, jb4, jb5, jb6 = st.columns(6)
-    if jb1.button("🔄 Update Security Master"):
+    if jb1.button("🔄 Update Security Master", use_container_width=True):
         out = run_update_security_master(repo)
         st.success(out.get("message", str(out)))
-    if jb2.button("🆕 Discover New Listings"):
+    if jb2.button("🆕 Discover New Listings", use_container_width=True):
         out = run_discover_new_listings(repo)
         st.success(out.get("message", str(out)))
-    if jb3.button("📑 Discover SEBI IPOs"):
+    if jb3.button("📑 Discover SEBI IPOs", use_container_width=True):
         out = run_discover_ipos(repo)
         st.success(out.get("message", str(out)))
-    if jb4.button("💹 Refresh Prices"):
+    if jb4.button("💹 Refresh Prices", use_container_width=True):
         out = run_refresh_prices(repo)
         st.success(out.get("message", str(out)))
-    if jb5.button("📊 Refresh Financials"):
+    if jb5.button("📊 Refresh Financials", use_container_width=True):
         out = run_refresh_financials(repo)
         st.success(out.get("message", str(out)))
-    if jb6.button("📰 Refresh Filing News"):
+    if jb6.button("📰 Refresh Filing News", use_container_width=True):
         out = run_research_news(repo)
         st.success(out.get("message", str(out)))
 
     st.divider()
-    st.subheader("2. Automated Discovery Queue (`CANDIDATE_PENDING_REVIEW`)")
-    st.info(
-        "Newly discovered listings and DRHP filings are placed here as `CANDIDATE_PENDING_REVIEW` and **never** promoted "
-        "into the active investable universe without analyst validation."
-    )
-    queue_items = repo.get_discovery_queue()
-    if not queue_items:
-        if st.button("Populate Discovery Queue via New Listing Scan"):
-            run_discover_new_listings(repo)
-            queue_items = repo.get_discovery_queue()
+    col_dq, col_sm, col_jr = st.columns([2.2, 1.3, 1.8])
+    with col_dq:
+        st.subheader("2. Discovery Queue (`CANDIDATE_PENDING_REVIEW`)")
+        queue_items = repo.get_discovery_queue()
+        if not queue_items:
+            if st.button("Populate Discovery Queue via New Listing Scan"):
+                run_discover_new_listings(repo)
+                queue_items = repo.get_discovery_queue()
+        if queue_items:
+            st.dataframe(pd.DataFrame(queue_items), use_container_width=True, hide_index=True, height=220)
+        else:
+            st.caption("Queue empty. Click above or run 'Discover New Listings' to scan.")
 
-    if queue_items:
-        st.dataframe(pd.DataFrame(queue_items), use_container_width=True, hide_index=True)
-
-    st.divider()
-    col_sm, col_jr = st.columns(2)
     with col_sm:
-        st.subheader("3. Security Master Alias & Ticker Verification")
+        st.subheader("3. Ticker Alias Map")
         sm = SecurityMasterService()
         alias_df = pd.DataFrame(
-            [{"Legacy / Alternate Ticker": k, "Canonical AI3 Symbol": v} for k, v in sm.KNOWN_ALIASES.items()]
+            [{"Legacy Ticker": k, "Canonical Symbol": v} for k, v in sm.KNOWN_ALIASES.items()]
         )
-        st.dataframe(alias_df, use_container_width=True, hide_index=True)
+        st.dataframe(alias_df, use_container_width=True, hide_index=True, height=220)
 
     with col_jr:
-        st.subheader("4. Recent Job Execution Audit Log")
+        st.subheader("4. Job Execution Audit Log")
         runs = repo.get_recent_job_runs(limit=15)
         if runs:
-            st.dataframe(pd.DataFrame(runs), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(runs), use_container_width=True, hide_index=True, height=220)
         else:
             st.caption("No job runs recorded yet. Click any job button above to execute and log a run.")
 
