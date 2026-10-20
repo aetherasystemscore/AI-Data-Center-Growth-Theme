@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.config import get_settings
-from core.schemas import ScoringProfile
-from data.ingestion import DataIngestionService
-from database.repository import AI3Repository
-
+import core.page_bootstrap as page_bootstrap
+from core.page_bootstrap import init_platform, render_sidebar_controls
 
 st.set_page_config(
     page_title="AI3 | AI Infrastructure Investment Intelligence",
@@ -18,25 +15,91 @@ st.set_page_config(
 )
 
 
-@st.cache_resource
-def init_platform() -> tuple[AI3Repository, DataIngestionService]:
-    repo = AI3Repository()
-    ingestion = DataIngestionService(repo=repo)
-    ingestion.ensure_bootstrapped()
-    return repo, ingestion
-
-
 def main() -> None:
     repo, ingestion = init_platform()
-    settings = get_settings()
 
+    if hasattr(st, "navigation") and hasattr(st, "Page"):
+        pages = [
+            st.Page(
+                "pages/dashboard.py",
+                title="1. Executive Dashboard",
+                icon="📊",
+                url_path="dashboard",
+                default=True,
+            ),
+            st.Page(
+                "pages/stock_screener.py",
+                title="2. AI Value-Chain Screener",
+                icon="🔍",
+                url_path="stock_screener",
+            ),
+            st.Page(
+                "pages/company_research.py",
+                title="3. Deep Company Research",
+                icon="🏢",
+                url_path="company_research",
+            ),
+            st.Page(
+                "pages/value_alternatives.py",
+                title="4. Value Alternative Finder",
+                icon="💎",
+                url_path="value_alternatives",
+            ),
+            st.Page(
+                "pages/etf_analysis.py",
+                title="5. ETF Research & Overlap",
+                icon="📦",
+                url_path="etf_analysis",
+            ),
+            st.Page(
+                "pages/smallcase_analysis.py",
+                title="6. Smallcase & Look-Through",
+                icon="🧩",
+                url_path="smallcase_analysis",
+            ),
+            st.Page(
+                "pages/ipo_tracker.py",
+                title="7. IPO, DRHP & New Listings",
+                icon="🚀",
+                url_path="ipo_tracker",
+            ),
+            st.Page(
+                "pages/circular_electronics.py",
+                title="8. Circular Electronics & E-Waste",
+                icon="♻️",
+                url_path="circular_electronics",
+            ),
+            st.Page(
+                "pages/portfolio_builder.py",
+                title="9. Portfolio Builder & Optimiser",
+                icon="📐",
+                url_path="portfolio_builder",
+            ),
+            st.Page(
+                "pages/backtesting.py",
+                title="10. Point-in-Time Backtesting",
+                icon="📈",
+                url_path="backtesting",
+            ),
+            st.Page(
+                "pages/settings.py",
+                title="11. Discovery Jobs & Settings",
+                icon="⚙️",
+                url_path="settings",
+            ),
+        ]
+        pg = st.navigation(pages, position="sidebar", expanded=True)
+        render_sidebar_controls()
+        page_bootstrap._IN_NAVIGATION_RUNNER = True
+        try:
+            pg.run()
+        finally:
+            page_bootstrap._IN_NAVIGATION_RUNNER = False
+        return
+
+    # Fallback for older Streamlit versions without st.navigation
+    render_sidebar_controls()
     with st.sidebar:
-        st.markdown("## ⚡ AI3 Intelligence")
-        st.caption(
-            "AI Infrastructure, Data Centre, Small Components, Circular Electronics & IPO Research Platform"
-        )
-        st.divider()
-
         page_options = {
             "1. Executive Dashboard": "dashboard",
             "2. AI Value-Chain Screener": "stock_screener",
@@ -50,34 +113,12 @@ def main() -> None:
             "10. Point-in-Time Backtesting": "backtesting",
             "11. Discovery Jobs & Settings": "settings",
         }
-
         selected_label = st.radio(
             "Navigation Module",
             options=list(page_options.keys()),
             index=0,
         )
         selected_module = page_options[selected_label]
-
-        st.divider()
-        profile_options = [p.value for p in ScoringProfile]
-        default_prof_idx = profile_options.index(ScoringProfile.DEFAULT_100PT.value)
-        active_profile = st.selectbox(
-            "Active Scoring Profile",
-            options=profile_options,
-            index=default_prof_idx,
-            help="Adjusts the 7-factor weights in the 100-point AI Infrastructure Exposure Model.",
-        )
-        st.session_state["active_scoring_profile"] = active_profile
-
-        st.info(
-            f"**Data Mode:** `{settings.data_mode}`\n\n"
-            "All metrics carry provenance tags (`SEED_REFERENCE_SNAPSHOT`, `ACTUAL_MARKET_CLOSE`, or `SYNTHETIC_SAMPLE_CALIBRATED`). "
-            "Missing fields remain `N/A` (never replaced with `0`)."
-        )
-        st.caption(
-            "**Disclaimer:** Research and portfolio analysis tool only. Not SEBI-registered investment advice. "
-            "Does not execute trades or auto-subscribe to IPOs."
-        )
 
     if selected_module == "dashboard":
         from pages.dashboard import render

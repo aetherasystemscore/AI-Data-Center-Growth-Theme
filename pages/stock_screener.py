@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+_PAGES_DIR = str(Path(__file__).resolve().parent)
+if _PAGES_DIR in sys.path:
+    sys.path.remove(_PAGES_DIR)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -153,3 +163,9 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             height=450,
         )
         st.plotly_chart(fig, use_container_width=True)
+
+
+if __name__ in ("__main__", "__page__"):
+    from core.page_bootstrap import run_standalone_page
+
+    run_standalone_page(render)

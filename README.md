@@ -1,9 +1,9 @@
 # ⚡ AI Infrastructure Investment Intelligence (AI3)
 
 <!-- LIVE_STREAMLIT_APP_BANNER_START -->
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-data-center-growth-theme.streamlit.app/)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-data-center-growth-theme-47pnyp6sud4jqeryhxbx2g.streamlit.app/)
 
-> **🚀 Live Streamlit App:** [**https://ai-data-center-growth-theme.streamlit.app/**](https://ai-data-center-growth-theme.streamlit.app/)
+> **🚀 Live Streamlit App:** [**https://ai-data-center-growth-theme-47pnyp6sud4jqeryhxbx2g.streamlit.app/**](https://ai-data-center-growth-theme-47pnyp6sud4jqeryhxbx2g.streamlit.app/)
 <!-- LIVE_STREAMLIT_APP_BANNER_END -->
 
 

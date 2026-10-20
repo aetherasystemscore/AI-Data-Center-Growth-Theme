@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+_PAGES_DIR = str(Path(__file__).resolve().parent)
+if _PAGES_DIR in sys.path:
+    sys.path.remove(_PAGES_DIR)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 import pandas as pd
 import streamlit as st
 
@@ -103,3 +113,9 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             with c2:
                 st.markdown(f"**What Could Break the Thesis:**\n> {alt.what_breaks_thesis}")
                 st.markdown(f"**Liquidity & Position-Sizing Suitability:**\n> {alt.liquidity_suitability}")
+
+
+if __name__ in ("__main__", "__page__"):
+    from core.page_bootstrap import run_standalone_page
+
+    run_standalone_page(render)

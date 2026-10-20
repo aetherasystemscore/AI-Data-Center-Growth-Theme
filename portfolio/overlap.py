@@ -9,9 +9,20 @@ from typing import Any
 from core.schemas import OverlapResult
 
 
-def normalize_weights(raw_weights: dict[str, float]) -> dict[str, float]:
-    """Normalize a dictionary of `{symbol: weight_pct_or_frac}` so positive weights sum to 100.0%."""
-    clean = {k.strip().upper(): float(v) for k, v in raw_weights.items() if k and float(v) > 0}
+def normalize_weights(raw_weights: dict[str, float] | list[dict[str, Any]]) -> dict[str, float]:
+    """Normalize a dictionary of `{symbol: weight_pct_or_frac}` or list of constituent dicts so positive weights sum to 100.0%."""
+    if isinstance(raw_weights, list):
+        clean = {
+            str(item.get("symbol", "")).strip().upper(): float(
+                item.get("weight_pct") or item.get("weight") or 0.0
+            )
+            for item in raw_weights
+            if isinstance(item, dict)
+            and item.get("symbol")
+            and float(item.get("weight_pct") or item.get("weight") or 0.0) > 0
+        }
+    else:
+        clean = {k.strip().upper(): float(v) for k, v in raw_weights.items() if k and float(v) > 0}
     total = sum(clean.values())
     if total <= 0:
         return {}
