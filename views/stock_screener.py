@@ -16,7 +16,11 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from analytics.equity_enrichment import compute_enriched_equity_metrics
+from analytics.equity_enrichment import (
+    compute_enriched_equity_metrics,
+    load_live_market_snapshot,
+    refresh_live_market_snapshot,
+)
 from analytics.exposure_scoring import score_company_exposure
 from analytics.fundamentals import evaluate_fundamental_health
 from analytics.valuation import compute_valuation_metrics
@@ -109,6 +113,9 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "Exchange": sec["exchange"],
                 "Primary Category": sec["primary_category"],
                 "CMP": enr["cmp"],
+                "1D Change (%)": enr.get("ret_1d_pct", 0.0),
+                "52W High": enr.get("high_52w", enr["cmp"]),
+                "52W Low": enr.get("low_52w", enr["cmp"]),
                 "AI Exposure Score": bd.total_score,
                 f"Profile ({profile})": bd.profile_adjusted_score,
                 "Fundamental Score": enr["fundamental_score"],
@@ -138,7 +145,10 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         )
 
     df = pd.DataFrame(records)
-    st.markdown(f"**Matching Securities:** `{len(df)}`")
+    live_snap = load_live_market_snapshot()
+    st.markdown(
+        f"**Matching Securities:** `{len(df)}` | **Live Quote Snapshot:** `{live_snap.get('as_of_ist', 'Ready')}`"
+    )
 
     if df.empty:
         st.info("No securities match the current filter combination. Relax one or more sliders above.")
@@ -147,13 +157,20 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     df = df.sort_values(f"Profile ({profile})", ascending=False)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
+    btn_c1, btn_c2 = st.columns([1.5, 2.5])
     csv_bytes = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
+    btn_c1.download_button(
         "📥 Export Screener Results (CSV)",
         data=csv_bytes,
         file_name=f"ai3_screener_{profile.lower()}.csv",
         mime="text/csv",
+        use_container_width=True,
     )
+    if btn_c2.button("🔄 Refresh Live NSE/BSE & Global CMPs", type="primary"):
+        with st.spinner("Refreshing live market quotes via Yahoo Finance..."):
+            snap = refresh_live_market_snapshot(update_csv=False)
+            st.success(f"Updated {len(snap.get('equities', {}))} live equity quotes as of {snap.get('as_of_ist')}.")
+            st.rerun()
 
     st.divider()
     st.subheader("Valuation (Trailing P/E) vs AI Infrastructure Exposure Score")

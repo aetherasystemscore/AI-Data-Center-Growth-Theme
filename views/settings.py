@@ -139,11 +139,22 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         st.subheader("2. Discovery Queue (`CANDIDATE_PENDING_REVIEW`)")
         queue_items = repo.get_discovery_queue()
         if not queue_items:
-            if st.button("Populate Discovery Queue via New Listing Scan"):
+            if st.button("Populate Discovery Queue via New Listing Scan", type="primary"):
                 run_discover_new_listings(repo)
                 queue_items = repo.get_discovery_queue()
         if queue_items:
             st.dataframe(pd.DataFrame(queue_items), use_container_width=True, hide_index=True, height=220)
+            cand_options = {f"#{c['id']} — {c['symbol']} ({c['company_name']}) [{c['status']}]": c["id"] for c in queue_items}
+            sel_cand_label = st.selectbox("Select Candidate for Analyst Review", options=list(cand_options.keys()))
+            dq_b1, dq_b2 = st.columns(2)
+            if dq_b1.button("✅ Approve Candidate", use_container_width=True):
+                if repo.update_discovery_candidate_status(cand_options[sel_cand_label], "APPROVED_INVESTABLE"):
+                    st.success(f"Approved candidate {sel_cand_label}")
+                    st.rerun()
+            if dq_b2.button("❌ Reject / Quarantine", use_container_width=True):
+                if repo.update_discovery_candidate_status(cand_options[sel_cand_label], "REJECTED_LOW_EXPOSURE"):
+                    st.warning(f"Rejected candidate {sel_cand_label}")
+                    st.rerun()
         else:
             st.caption("Queue empty. Click above or run 'Discover New Listings' to scan.")
 
@@ -159,7 +170,15 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         st.subheader("4. Job Execution Audit Log")
         runs = repo.get_recent_job_runs(limit=15)
         if runs:
-            st.dataframe(pd.DataFrame(runs), use_container_width=True, hide_index=True, height=220)
+            df_runs = pd.DataFrame(runs)
+            st.dataframe(df_runs, use_container_width=True, hide_index=True, height=220)
+            st.download_button(
+                "📥 Export Job Execution Audit Log (CSV)",
+                data=df_runs.to_csv(index=False).encode("utf-8"),
+                file_name="ai3_job_execution_audit_log.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
         else:
             st.caption("No job runs recorded yet. Click any job button above to execute and log a run.")
 

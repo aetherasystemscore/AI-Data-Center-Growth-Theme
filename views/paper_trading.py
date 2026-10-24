@@ -24,7 +24,9 @@ from jobs.run_paper_trade_3pm import run_paper_trade_3pm_job
 from portfolio.paper_trading import (
     build_forward_horizon_kpi_table,
     ensure_paper_trading_ledger,
+    execute_manual_paper_trade,
     get_ist_now,
+    refresh_paper_ledger_mtm,
     run_5y_historical_verifiable_backtest,
 )
 
@@ -57,7 +59,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     # =========================================================================
     st.subheader("🟢 Section 1: Live Forward Paper-Trading Ledger (Today Onwards — Daily 3:00 PM IST)")
 
-    col_sched, col_btn = st.columns([4.2, 1.3])
+    col_sched, col_btn1, col_btn2, col_btn3 = st.columns([3.2, 1.15, 1.15, 1.1])
     with col_sched:
         st.info(
             f"⏰ **Schedule:** `{ledger['execution_schedule']}` &nbsp;|&nbsp; "
@@ -66,11 +68,55 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             f"**Last Executed 3:00 PM IST Run:** `{ledger['last_executed_timestamp_ist']}` &nbsp;|&nbsp; "
             f"**Next Scheduled Run:** `{ledger['next_scheduled_timestamp_ist']}`"
         )
-    with col_btn:
+    with col_btn1:
         if st.button("⚡ Sync / Run 3:00 PM IST Cycle Now", type="primary", use_container_width=True):
             res = run_paper_trade_3pm_job(repo=repo, force=True, scoring_profile=active_profile)
             ledger = ensure_paper_trading_ledger(repo=repo, ingestion=ingestion, scoring_profile=active_profile)
             st.success(res["message"])
+    with col_btn2:
+        if st.button("🔄 Refresh Live MTM Prices (Yahoo)", use_container_width=True):
+            with st.spinner("Fetching live NSE/BSE quotes and marking open paper positions to market..."):
+                ledger = refresh_paper_ledger_mtm(repo=repo, ingestion=ingestion, fetch_live_yf=True)
+            st.success(f"Marked {len(ledger['positions'])} open positions to live CMP. Net NAV: Rs {ledger['current_net_nav_inr']:,.2f}")
+    with col_btn3:
+        if st.button("♻️ Rebalance to Profile Targets", use_container_width=True):
+            ledger = ensure_paper_trading_ledger(
+                repo=repo,
+                ingestion=ingestion,
+                scoring_profile=active_profile,
+                force_run_today=True,
+            )
+            st.success(f"Rebalanced paper book to `{active_profile}` conviction targets.")
+
+    with st.expander("📝 Execute Manual Paper Trade Order (Buy / Sell with Indian Delivery Costs)", expanded=False):
+        all_india_secs = repo.get_securities(geography="INDIA", investable_only=True)
+        sym_options = [s["symbol"] for s in all_india_secs]
+        mc1, mc2, mc3, mc4, mc5 = st.columns([1.4, 1.0, 1.0, 1.8, 1.2])
+        with mc1:
+            manual_sym = st.selectbox("Ticker Symbol (NSE/BSE)", options=sym_options, index=sym_options.index("NETWEB") if "NETWEB" in sym_options else 0)
+        with mc2:
+            manual_side = st.selectbox("Order Side", options=["BUY", "SELL"], index=0)
+        with mc3:
+            manual_qty = st.number_input("Quantity (Shares)", min_value=1, max_value=50000, value=5, step=1)
+        with mc4:
+            manual_reason = st.text_input("Order Note / Conviction Tag", value="Manual tactical paper trade @ live CMP")
+        with mc5:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("🚀 Place Paper Order", type="primary", use_container_width=True):
+                try:
+                    ledger = execute_manual_paper_trade(
+                        repo=repo,
+                        ingestion=ingestion,
+                        symbol=manual_sym,
+                        side=manual_side,
+                        quantity=int(manual_qty),
+                        rationale=manual_reason,
+                    )
+                    st.success(
+                        f"Filled {manual_side} {int(manual_qty)} shares of `{manual_sym}`! Updated Paper Net NAV: Rs {ledger['current_net_nav_inr']:,.2f}"
+                    )
+                except Exception as err:
+                    st.error(str(err))
 
     p1, p2, p3, p4, p5, p6 = st.columns(6)
     p1.metric("Initial Paper Capital", f"Rs {ledger['initial_capital_inr']:,.0f}", f"Incepted: {ledger['inception_date']}")
@@ -105,12 +151,30 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     with tab_pos:
         df_pos = pd.DataFrame(ledger["positions"])
         st.dataframe(df_pos, use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Export Open Paper Positions (CSV)",
+            data=df_pos.to_csv(index=False).encode("utf-8"),
+            file_name="ai3_paper_trading_open_positions.csv",
+            mime="text/csv",
+        )
     with tab_orders:
         df_ord = pd.DataFrame(ledger["trades_log"])
         st.dataframe(df_ord, use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Export 3:00 PM IST Order Blotter (CSV)",
+            data=df_ord.to_csv(index=False).encode("utf-8"),
+            file_name="ai3_paper_trading_order_blotter.csv",
+            mime="text/csv",
+        )
     with tab_nav_log:
         df_nh = pd.DataFrame(ledger["nav_history"])
         st.dataframe(df_nh, use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Export Forward Daily NAV Log (CSV)",
+            data=df_nh.to_csv(index=False).encode("utf-8"),
+            file_name="ai3_paper_trading_nav_history.csv",
+            mime="text/csv",
+        )
 
     # =========================================================================
     # SECTION 2: SEPARATE 5-YEAR HISTORICAL VERIFIABLE BACKTEST (LAST 5 YEARS)

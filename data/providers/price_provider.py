@@ -53,6 +53,8 @@ class HybridPriceProvider(BasePriceProvider):
         annual_return_hint_pct: float | None = None,
         volatility_hint_pct: float | None = None,
         avg_daily_turnover_cr: float | None = None,
+        force_live: bool = False,
+        yf_ticker_override: str | None = None,
     ) -> ProviderPayload:
         """Fetch OHLCV history with point-in-time listing date enforcement."""
         effective_start = max(start_date, listing_date) if listing_date else start_date
@@ -65,11 +67,11 @@ class HybridPriceProvider(BasePriceProvider):
                 warnings=[f"{symbol} was not listed between {start_date} and {end_date}."],
             )
 
-        if self.settings.data_mode == "LIVE":
+        if force_live or self.settings.data_mode == "LIVE":
             try:
                 import yfinance as yf
 
-                yf_ticker = _exchange_to_yf_suffix(exchange, symbol)
+                yf_ticker = yf_ticker_override or _exchange_to_yf_suffix(exchange, symbol)
                 df = yf.download(
                     yf_ticker,
                     start=effective_start.isoformat(),

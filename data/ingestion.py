@@ -68,14 +68,18 @@ class DataIngestionService:
         symbol: str,
         start_date: date,
         end_date: date,
+        force_live: bool = False,
     ) -> dict[str, Any]:
         """Fetch validated OHLCV price history for `symbol` with point-in-time listing date enforcement."""
+        from analytics.equity_enrichment import get_live_equity_quote
+
         sec = self.repo.get_security_by_symbol(symbol)
         if not sec:
             return {"df": None, "warnings": [f"Unknown symbol {symbol}"], "source_name": "UNKNOWN"}
 
         fundamentals_map = self.repo.get_latest_fundamentals_map()
         f = fundamentals_map.get(symbol, {})
+        live_q = get_live_equity_quote(symbol)
 
         listing_dt: date | None = None
         if sec.get("listing_date"):
@@ -84,9 +88,15 @@ class DataIngestionService:
             except ValueError:
                 listing_dt = None
 
-        # Derive reasonable reference price and return hint from fundamentals snapshot
+        # Derive reference price from live market snapshot or fundamentals snapshot
         mcap_cr = f.get("market_cap_inr_cr") or 5000.0
-        ref_price = max(25.0, min(45000.0, round((mcap_cr ** 0.52) * 8.5, 2)))
+        if live_q and live_q.get("cmp") and float(live_q["cmp"]) > 0:
+            ref_price = float(live_q["cmp"])
+            yft_override = str(live_q.get("yf_ticker") or "")
+        else:
+            ref_price = max(25.0, min(45000.0, round((mcap_cr ** 0.52) * 8.5, 2)))
+            yft_override = str(sec.get("yf_ticker") or "")
+
         rev_cagr_3y = f.get("rev_cagr_3y_pct")
         annual_drift = 16.0 if rev_cagr_3y is None else max(-20.0, min(42.0, rev_cagr_3y * 0.75))
         if not sec.get("is_investable", True):
@@ -102,6 +112,8 @@ class DataIngestionService:
             annual_return_hint_pct=annual_drift,
             volatility_hint_pct=26.0 if sec.get("universe_tier") != "HIGH_RISK_RESEARCH" else 42.0,
             avg_daily_turnover_cr=f.get("avg_daily_turnover_inr_cr") or 10.0,
+            force_live=force_live,
+            yf_ticker_override=yft_override or None,
         )
         df = payload.data
         validation = validate_ohlcv_dataframe(df, symbol=sec["symbol"])

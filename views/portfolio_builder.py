@@ -24,6 +24,7 @@ from core.schemas import OptimisationMethod
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
 from portfolio.basket_builder import build_portfolio_summary
+from portfolio.paper_trading import deploy_custom_basket_to_paper_trading
 from portfolio.rebalancing import compute_rebalance_trades
 
 
@@ -194,7 +195,52 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         f"**Initial Deployment Cost (STT 0.10% + Stamp Duty 0.015% + Exchange/SEBI/GST + Liquidity Slippage):** "
         f"`Rs {reb['total_transaction_cost_inr']:,.2f}` (`{(reb['total_transaction_cost_inr'] / cap_inr) * 100:.3f}%` of capital)"
     )
-    st.dataframe(pd.DataFrame(enriched_trades), use_container_width=True, hide_index=True)
+    df_trades = pd.DataFrame(enriched_trades)
+    st.dataframe(df_trades, use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.subheader("🚀 Portfolio Basket Actions (Save, Export, or Deploy to Paper Trading)")
+    pb_c1, pb_c2, pb_c3, pb_c4 = st.columns([1.8, 1.4, 1.6, 1.5])
+    basket_name_input = pb_c1.text_input(
+        "Basket Name",
+        value=f"AI3 {opt_method} ({profile})",
+        label_visibility="collapsed",
+    )
+    if pb_c2.button("💾 Save Basket to Database", use_container_width=True):
+        b_id = repo.save_custom_portfolio_basket(
+            basket_name=basket_name_input,
+            weights_map=weights,
+            capital_inr=cap_inr,
+            scoring_profile=profile,
+            optimisation_method=opt_method,
+        )
+        st.success(f"Saved basket `{basket_name_input}` (ID #{b_id}) to SQLite.")
+
+    if pb_c3.button("🚀 Deploy Basket to Paper Trading", type="primary", use_container_width=True):
+        with st.spinner("Deploying custom basket to live Paper Trading ledger at current CMPs..."):
+            ledger = deploy_custom_basket_to_paper_trading(
+                repo=repo,
+                ingestion=ingestion,
+                weights_map=weights,
+                initial_capital_inr=cap_inr,
+                scoring_profile=profile,
+            )
+            st.success(
+                f"Deployed {len(ledger.get('positions', []))} positions to Paper Trading Book (Net NAV: Rs {ledger.get('current_net_nav_inr', 0):,.2f})!"
+            )
+
+    pb_c4.download_button(
+        "📥 Export Trade Sheet (CSV)",
+        data=df_trades.to_csv(index=False).encode("utf-8"),
+        file_name=f"ai3_portfolio_trades_{opt_method.lower()}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    saved_baskets = repo.get_saved_portfolio_baskets(limit=10)
+    if saved_baskets:
+        with st.expander(f"📂 Saved Portfolio Baskets in Database ({len(saved_baskets)})", expanded=False):
+            st.dataframe(pd.DataFrame(saved_baskets), use_container_width=True, hide_index=True)
 
 
 if __name__ in ("__main__", "__page__"):

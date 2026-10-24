@@ -159,7 +159,14 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         )
 
     st.subheader(f"Target Benchmark (`{target_sym}`) vs Shortlisted Value Alternatives")
-    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+    df_summary = pd.DataFrame(summary_rows)
+    st.dataframe(df_summary, use_container_width=True, hide_index=True)
+    st.download_button(
+        f"📥 Export {target_sym} vs Value Alternatives Table (CSV)",
+        data=df_summary.to_csv(index=False).encode("utf-8"),
+        file_name=f"ai3_value_alternatives_{target_sym.lower()}.csv",
+        mime="text/csv",
+    )
 
     # 2-Year Price Trend & Shareholding Trend (Promoter / FII / DII) across Target + Alternatives
     st.divider()

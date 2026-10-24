@@ -1783,3 +1783,122 @@ class AI3Repository:
                 out.append(payload)
             return out
 
+    def update_discovery_candidate_status(self, candidate_id: int, new_status: str) -> bool:
+        """Update review status (APPROVED / REJECTED / CANDIDATE_PENDING_REVIEW) of a discovery queue item."""
+        with self.SessionLocal() as session:
+            rec = session.scalar(
+                select(AlertModel).where(
+                    AlertModel.id == candidate_id,
+                    AlertModel.alert_type == "DISCOVERY_CANDIDATE",
+                )
+            )
+            if rec is None:
+                return False
+            try:
+                payload = json.loads(rec.message)
+            except Exception:
+                payload = {"company_name": rec.symbol_or_entity}
+            payload["status"] = new_status
+            payload["review_status"] = new_status
+            payload["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+            rec.message = json.dumps(payload)
+            rec.is_acknowledged = new_status == "APPROVED"
+            session.commit()
+            return True
+
+    def upsert_news_event(
+        self,
+        symbol: str,
+        company_name: str,
+        headline: str,
+        summary: str,
+        event_date: date,
+        event_category: str = "CORPORATE_ANNOUNCEMENT",
+        event_stage: str = "CONFIRMED_DISCLOSURE",
+        disclosed_amount_cr_inr: Optional[float] = None,
+        reflected_in_financials: bool = False,
+        source_name: str = "GOOGLE_NEWS_RSS_LIVE",
+        source_url: str = "",
+    ) -> bool:
+        """Insert a news event if an identical (symbol, headline) does not already exist."""
+        sym_u = symbol.strip().upper()
+        head_s = headline.strip()
+        if not head_s:
+            return False
+        with self.SessionLocal() as session:
+            existing = session.scalar(
+                select(NewsEventModel).where(
+                    NewsEventModel.symbol == sym_u,
+                    NewsEventModel.headline == head_s,
+                )
+            )
+            if existing is not None:
+                return False
+            session.add(
+                NewsEventModel(
+                    symbol=sym_u,
+                    company_name=company_name or sym_u,
+                    event_category=event_category,
+                    event_stage=event_stage,
+                    event_date=event_date,
+                    disclosed_amount_cr_inr=disclosed_amount_cr_inr,
+                    headline=head_s,
+                    summary=summary or head_s,
+                    reflected_in_financials=reflected_in_financials,
+                    source_name=source_name,
+                    source_url=source_url,
+                )
+            )
+            session.commit()
+            return True
+
+    def save_custom_portfolio_basket(
+        self,
+        basket_name: str,
+        weights_map: Dict[str, float],
+        capital_inr: float,
+        scoring_profile: str,
+        optimisation_method: str = "CONVICTION_WEIGHTED",
+    ) -> int:
+        """Persist a custom or optimised portfolio basket into SQLite."""
+        payload = {
+            "basket_name": basket_name.strip() or "AI3 Custom Basket",
+            "weights_map": {k: round(float(v), 2) for k, v in weights_map.items() if float(v) > 0},
+            "capital_inr": round(float(capital_inr), 2),
+            "scoring_profile": scoring_profile,
+            "optimisation_method": optimisation_method,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with self.SessionLocal() as session:
+            rec = AlertModel(
+                symbol_or_entity=payload["basket_name"],
+                alert_type="SAVED_PORTFOLIO_BASKET",
+                severity="INFO",
+                message=json.dumps(payload),
+                is_acknowledged=True,
+            )
+            session.add(rec)
+            session.commit()
+            session.refresh(rec)
+            return int(rec.id)
+
+    def get_saved_portfolio_baskets(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Retrieve saved portfolio baskets from SQLite."""
+        with self.SessionLocal() as session:
+            rows = session.scalars(
+                select(AlertModel)
+                .where(AlertModel.alert_type == "SAVED_PORTFOLIO_BASKET")
+                .order_by(AlertModel.triggered_at.desc())
+                .limit(limit)
+            ).all()
+            out: List[Dict[str, Any]] = []
+            for r in rows:
+                try:
+                    data = json.loads(r.message)
+                    data["id"] = r.id
+                    out.append(data)
+                except Exception:
+                    continue
+            return out
+
+

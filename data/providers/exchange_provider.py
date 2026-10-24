@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import io
+import urllib.parse
+import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from typing import Any
 
@@ -14,6 +16,30 @@ from core.logging_config import get_logger
 from data.providers.base import BaseExchangeProvider, ProviderPayload
 
 logger = get_logger(__name__)
+
+
+def fetch_google_news_rss(query: str, max_items: int = 3) -> list[dict[str, str]]:
+    """Fetch live RSS news headlines from Google News India for a company or corporate filing query."""
+    encoded = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
+    items: list[dict[str, str]] = []
+    try:
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+            timeout=5,
+        )
+        if resp.status_code == 200 and "<rss" in resp.text[:400].lower():
+            root = ET.fromstring(resp.text)
+            for node in root.findall(".//item")[:max_items]:
+                title = (node.findtext("title") or "").strip()
+                link = (node.findtext("link") or "").strip()
+                pub = (node.findtext("pubDate") or "").strip()
+                if title:
+                    items.append({"title": title, "link": link, "published": pub})
+    except Exception as exc:
+        logger.debug("Google News RSS fetch skipped for %s: %s", query, exc)
+    return items
 
 
 class HybridExchangeProvider(BaseExchangeProvider):

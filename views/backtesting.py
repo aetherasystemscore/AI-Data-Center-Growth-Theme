@@ -71,7 +71,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     with c1:
         start_dt = st.date_input("Start Date", value=date(2022, 1, 3), min_value=date(2019, 1, 1), max_value=date(2025, 12, 31))
     with c2:
-        end_dt = st.date_input("End Date", value=date(2026, 3, 31), min_value=date(2022, 6, 1), max_value=date.today())
+        end_dt = st.date_input("End Date", value=date.today(), min_value=date(2022, 6, 1), max_value=date.today())
     with c3:
         reb_freq = st.selectbox("Rebalance Frequency", ["QUARTERLY", "MONTHLY", "SEMI_ANNUAL", "ANNUAL"], index=0)
     with c4:
@@ -134,11 +134,37 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     col_log, col_wf = st.columns([1, 1])
     with col_log:
         st.subheader("Point-in-Time Rebalance Execution Log")
-        st.dataframe(pd.DataFrame(res["rebalance_log"]), use_container_width=True, hide_index=True)
+        df_rebal_log = pd.DataFrame(res["rebalance_log"])
+        st.dataframe(df_rebal_log, use_container_width=True, hide_index=True)
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button(
+                "📥 Export Rebalance Log (CSV)",
+                data=df_rebal_log.to_csv(index=False).encode("utf-8"),
+                file_name=f"ai3_backtest_rebalance_{start_dt}_{end_dt}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with dl2:
+            df_nav_export = pd.DataFrame(
+                {
+                    "Date": res["net_nav_series"].index,
+                    "Net_NAV_INR": res["net_nav_series"].values,
+                    "Gross_NAV_INR": res["gross_nav_series"].values,
+                    "Benchmark_NAV_INR": res["benchmark_nav_series"].values,
+                }
+            )
+            st.download_button(
+                "📥 Export Daily NAV Series (CSV)",
+                data=df_nav_export.to_csv(index=False).encode("utf-8"),
+                file_name=f"ai3_backtest_nav_series_{start_dt}_{end_dt}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
 
     with col_wf:
         st.subheader("Walk-Forward Validation (In-Sample vs Out-of-Sample)")
-        if st.button("Run Rolling Walk-Forward Analysis (12M IS / 6M OOS)"):
+        if st.button("Run Rolling Walk-Forward Analysis (12M IS / 6M OOS)", type="primary", use_container_width=True):
             wf_rows = run_walk_forward_validation(
                 symbols=selected_syms,
                 start_date=start_dt,
@@ -148,7 +174,17 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 optimisation_method=opt_method,
                 engine=engine,
             )
-            st.dataframe(pd.DataFrame(wf_rows), use_container_width=True, hide_index=True)
+            st.session_state["last_wf_rows"] = wf_rows
+        if st.session_state.get("last_wf_rows"):
+            df_wf = pd.DataFrame(st.session_state["last_wf_rows"])
+            st.dataframe(df_wf, use_container_width=True, hide_index=True)
+            st.download_button(
+                "📥 Export Walk-Forward Results (CSV)",
+                data=df_wf.to_csv(index=False).encode("utf-8"),
+                file_name="ai3_walk_forward_validation.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
 
 
 if __name__ in ("__main__", "__page__"):

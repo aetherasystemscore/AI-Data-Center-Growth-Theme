@@ -78,7 +78,14 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             adjacent_rows.append(row_data)
 
     st.subheader("1. Dedicated E-Waste, ITAD & Circular Electronics Candidates")
-    st.dataframe(pd.DataFrame(circular_rows), use_container_width=True, hide_index=True)
+    df_circ = pd.DataFrame(circular_rows)
+    st.dataframe(df_circ, use_container_width=True, hide_index=True)
+    st.download_button(
+        "📥 Export Circular Electronics & Adjacent Supply-Chain Matrix (CSV)",
+        data=pd.DataFrame(circular_rows + adjacent_rows).to_csv(index=False).encode("utf-8"),
+        file_name="ai3_circular_electronics_matrix.csv",
+        mime="text/csv",
+    )
 
     if adjacent_rows:
         with st.expander("🔗 Adjacent Circular Supply-Chain & Reverse-Logistics Peers (Copper, EMS, IT Distribution)", expanded=False):

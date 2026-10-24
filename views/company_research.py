@@ -149,6 +149,12 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         for u in memo.key_uncertainties:
             st.markdown(f"- {u}")
         st.caption("Citations: " + " | ".join(memo.evidence_citations))
+        st.download_button(
+            f"📥 Download {symbol} Institutional Memo (JSON)",
+            data=memo.model_dump_json(indent=2).encode("utf-8"),
+            file_name=f"ai3_research_memo_{symbol.lower()}.json",
+            mime="application/json",
+        )
 
     st.divider()
 
@@ -167,7 +173,13 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         fig_sh.update_layout(height=320, margin=dict(t=35, l=10, r=10, b=10), legend=dict(orientation="h", y=-0.22))
         st.plotly_chart(fig_sh, use_container_width=True)
     with col_sh_tbl:
-        st.dataframe(q_df, use_container_width=True, hide_index=True, height=320)
+        st.dataframe(q_df, use_container_width=True, hide_index=True, height=280)
+        st.download_button(
+            f"📥 Export {symbol} 8-Quarter Trend (CSV)",
+            data=q_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"ai3_8q_trend_{symbol.lower()}.csv",
+            mime="text/csv",
+        )
 
     st.divider()
 
@@ -175,7 +187,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.subheader("📈 Price Action, Moving Averages (20/50/200 DMA) & Technical Regime (Last 2 Years)")
     end_dt = date.today()
     start_dt = end_dt - timedelta(days=730)
-    price_res = ingestion.get_or_generate_price_history(symbol, start_date=start_dt, end_date=end_dt)
+    price_res = ingestion.get_or_generate_price_history(symbol, start_date=start_dt, end_date=end_dt, force_live=True)
     df_p = price_res.get("df")
     if df_p is not None and not df_p.empty:
         tech = compute_technical_indicators(df_p)

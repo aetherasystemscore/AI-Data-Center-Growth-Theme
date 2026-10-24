@@ -13,7 +13,10 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from analytics.equity_enrichment import compute_enriched_equity_metrics
+from analytics.equity_enrichment import (
+    compute_enriched_equity_metrics,
+    refresh_live_market_snapshot,
+)
 from analytics.exposure_scoring import score_company_exposure
 from analytics.portfolio_optimisation import optimise_portfolio_weights
 from backtesting.engine import BacktestConfig, PointInTimeBacktestEngine
@@ -710,6 +713,275 @@ def build_forward_horizon_kpi_table(
         )
 
     return forward_rows
+
+
+def refresh_paper_ledger_mtm(
+    repo: AI3Repository,
+    ingestion: DataIngestionService,
+    fetch_live_yf: bool = True,
+) -> dict[str, Any]:
+    """Fetch live market prices (if enabled) and mark all open paper-trading positions to market."""
+    if fetch_live_yf:
+        try:
+            refresh_live_market_snapshot(update_csv=False)
+        except Exception:
+            pass
+    ledger = ensure_paper_trading_ledger(repo=repo, ingestion=ingestion)
+    now_ist = get_ist_now()
+    slot_date = now_ist.date()
+    slot_ts = now_ist.strftime("%Y-%m-%d %H:%M:%S IST")
+    ledger = _append_daily_3pm_mtm(ledger, repo, ingestion, slot_date, slot_ts)
+    PAPER_LEDGER_PATH.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
+    return ledger
+
+
+def execute_manual_paper_trade(
+    repo: AI3Repository,
+    ingestion: DataIngestionService,
+    symbol: str,
+    side: str,
+    quantity: int,
+    custom_price: float | None = None,
+    rationale: str = "Manual Paper Trade Order",
+) -> dict[str, Any]:
+    """Execute a manual BUY or SELL order in the paper-trading ledger with realistic Indian delivery costs."""
+    sym = symbol.strip().upper()
+    side_u = side.strip().upper()
+    qty = max(1, int(quantity))
+    ledger = ensure_paper_trading_ledger(repo=repo, ingestion=ingestion)
+
+    all_secs = {s["symbol"]: s for s in repo.get_securities()}
+    f_map = repo.get_latest_fundamentals_map()
+    sec = all_secs.get(sym, {"symbol": sym, "company_name": sym, "primary_category": "OTHER", "is_investable": True})
+    f = f_map.get(sym, {})
+    active_prof = ledger.get("active_scoring_profile", ScoringProfile.HIGH_GROWTH_INFRA.value)
+    enr = compute_enriched_equity_metrics(sec, f, profile=active_prof)
+
+    exec_price = round(float(custom_price if (custom_price and custom_price > 0) else (enr["cmp"] or 100.0)), 2)
+    notional_inr = round(qty * exec_price, 2)
+    adv_cr = float(f.get("avg_daily_turnover_inr_cr") or 20.0)
+    cost_info = estimate_trade_cost_inr(
+        notional_inr=notional_inr,
+        side=side_u,
+        avg_daily_turnover_inr_cr=adv_cr,
+    )
+    tx_cost = round(float(cost_info["total_cost_inr"]), 2)
+    cash = float(ledger.get("cash_balance_inr", 0.0))
+    now_ts = get_ist_now().strftime("%Y-%m-%d %H:%M:%S IST")
+
+    positions: list[dict[str, Any]] = ledger.get("positions", [])
+    pos_map = {p["Symbol"]: p for p in positions}
+
+    if side_u == "BUY":
+        if sym in pos_map:
+            p = pos_map[sym]
+            old_qty = int(p["Qty (Shares)"])
+            old_inv = float(p["Invested Value (Rs)"])
+            new_qty = old_qty + qty
+            new_inv = round(old_inv + notional_inr, 2)
+            avg_entry = round(new_inv / max(1, new_qty), 2)
+            p["Qty (Shares)"] = new_qty
+            p["Entry Price @ 3PM IST (Rs)"] = avg_entry
+            p["Current CMP (Rs)"] = exec_price
+            p["Invested Value (Rs)"] = new_inv
+            p["Current Market Value (Rs)"] = round(new_qty * exec_price, 2)
+            p["Delivery Tx Cost (Rs)"] = round(float(p["Delivery Tx Cost (Rs)"]) + tx_cost, 2)
+        else:
+            positions.append(
+                {
+                    "Symbol": sym,
+                    "Company": sec.get("company_name", sym),
+                    "Category": sec.get("primary_category", "OTHER"),
+                    "Target Weight (%)": 0.0,
+                    "Qty (Shares)": qty,
+                    "Entry Price @ 3PM IST (Rs)": exec_price,
+                    "Current CMP (Rs)": exec_price,
+                    "Invested Value (Rs)": notional_inr,
+                    "Current Market Value (Rs)": notional_inr,
+                    "Delivery Tx Cost (Rs)": tx_cost,
+                    "Unrealised P&L (Rs)": 0.0,
+                    "Net P&L Post-Cost (Rs)": round(-tx_cost, 2),
+                    "Net Return (%)": round((-tx_cost / max(1.0, notional_inr)) * 100.0, 2),
+                    "AI Exposure Score": enr["ai_exposure_score"],
+                    "Fundamental Score": enr["fundamental_score"],
+                    "Technical Score": enr["technical_score"],
+                    "Analyst Rating": enr["analyst_rating"],
+                    "Price Trend (1M | 6M | 1Y | 2Y)": enr["price_trend_summary"],
+                    "Promoter % (2Y Trend)": enr["promoter_trend"],
+                    "FII % (2Y Trend)": enr["fii_trend"],
+                    "DII % (2Y Trend)": enr["dii_trend"],
+                }
+            )
+        cash = round(cash - notional_inr - tx_cost, 2)
+    elif side_u == "SELL":
+        if sym not in pos_map:
+            raise ValueError(f"Cannot SELL {sym}: no open position in paper-trading book.")
+        p = pos_map[sym]
+        old_qty = int(p["Qty (Shares)"])
+        sell_qty = min(old_qty, qty)
+        sell_notional = round(sell_qty * exec_price, 2)
+        entry_px = float(p["Entry Price @ 3PM IST (Rs)"])
+        rem_qty = old_qty - sell_qty
+        if rem_qty <= 0:
+            positions = [x for x in positions if x["Symbol"] != sym]
+        else:
+            p["Qty (Shares)"] = rem_qty
+            p["Invested Value (Rs)"] = round(rem_qty * entry_px, 2)
+            p["Current CMP (Rs)"] = exec_price
+            p["Current Market Value (Rs)"] = round(rem_qty * exec_price, 2)
+            p["Delivery Tx Cost (Rs)"] = round(float(p["Delivery Tx Cost (Rs)"]) + tx_cost, 2)
+        notional_inr = sell_notional
+        qty = sell_qty
+        cash = round(cash + sell_notional - tx_cost, 2)
+
+    ledger["positions"] = positions
+    ledger["cash_balance_inr"] = cash
+    ledger["cumulative_tx_cost_inr"] = round(float(ledger.get("cumulative_tx_cost_inr", 0.0)) + tx_cost, 2)
+
+    total_mv = sum(float(p["Current Market Value (Rs)"]) for p in positions)
+    for p in positions:
+        p["Target Weight (%)"] = round((float(p["Current Market Value (Rs)"]) / max(1.0, total_mv + max(0.0, cash))) * 100.0, 2)
+
+    ledger.setdefault("trades_log", []).append(
+        {
+            "Execution Timestamp (IST)": now_ts,
+            "Symbol": sym,
+            "Company": sec.get("company_name", sym),
+            "Action": f"MANUAL_{side_u}",
+            "Target Weight (%)": round((notional_inr / max(1.0, total_mv + max(0.0, cash))) * 100.0, 2),
+            "Shares Qty": qty,
+            "Execution Price (Rs)": exec_price,
+            "Gross Notional (Rs)": notional_inr,
+            "Indian Delivery Tx Cost (Rs)": tx_cost,
+            "Cost (bps)": cost_info["effective_cost_bps"],
+            "Order Rationales": rationale or f"Manual {side_u} order via Paper Trading Desk",
+        }
+    )
+
+    ledger = _append_daily_3pm_mtm(ledger, repo, ingestion, get_ist_now().date(), now_ts)
+    PAPER_LEDGER_PATH.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
+    return ledger
+
+
+def deploy_custom_basket_to_paper_trading(
+    repo: AI3Repository,
+    ingestion: DataIngestionService,
+    weights_map: dict[str, float],
+    initial_capital_inr: float = 1_000_000.0,
+    scoring_profile: str | None = None,
+) -> dict[str, Any]:
+    """Deploy a custom Portfolio Builder weight map into the live paper-trading ledger."""
+    PAPER_LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    now_ist = get_ist_now()
+    slot_date, _ = latest_3pm_ist_slot(now_ist)
+    slot_ts = now_ist.strftime("%Y-%m-%d %H:%M:%S IST")
+    rank_info = rank_scoring_profiles_5y(repo=repo, ingestion=ingestion)
+    active_prof = scoring_profile or rank_info["best_profile"]
+
+    all_secs = {s["symbol"]: s for s in repo.get_securities()}
+    f_map = repo.get_latest_fundamentals_map()
+
+    positions: list[dict[str, Any]] = []
+    trades_log: list[dict[str, Any]] = []
+    total_invested = 0.0
+    total_tx_cost = 0.0
+
+    for sym, w_pct in sorted(weights_map.items(), key=lambda x: x[1], reverse=True):
+        if float(w_pct) <= 0.05:
+            continue
+        sec = all_secs.get(sym, {"symbol": sym, "company_name": sym, "primary_category": "OTHER", "is_investable": True})
+        f = f_map.get(sym, {})
+        enr = compute_enriched_equity_metrics(sec, f, profile=active_prof)
+        exec_price = float(enr["cmp"] or 100.0)
+        target_notional = initial_capital_inr * (float(w_pct) / 100.0)
+        qty = max(1, int(target_notional // max(1.0, exec_price)))
+        invested_inr = round(qty * exec_price, 2)
+        adv_cr = float(f.get("avg_daily_turnover_inr_cr") or 20.0)
+        cost_info = estimate_trade_cost_inr(notional_inr=invested_inr, side="BUY", avg_daily_turnover_inr_cr=adv_cr)
+        tx_cost = round(float(cost_info["total_cost_inr"]), 2)
+        total_invested += invested_inr
+        total_tx_cost += tx_cost
+
+        positions.append(
+            {
+                "Symbol": sym,
+                "Company": sec.get("company_name", sym),
+                "Category": sec.get("primary_category", "OTHER"),
+                "Target Weight (%)": round(float(w_pct), 2),
+                "Qty (Shares)": qty,
+                "Entry Price @ 3PM IST (Rs)": round(exec_price, 2),
+                "Current CMP (Rs)": round(exec_price, 2),
+                "Invested Value (Rs)": invested_inr,
+                "Current Market Value (Rs)": invested_inr,
+                "Delivery Tx Cost (Rs)": tx_cost,
+                "Unrealised P&L (Rs)": 0.0,
+                "Net P&L Post-Cost (Rs)": round(-tx_cost, 2),
+                "Net Return (%)": round((-tx_cost / max(1.0, invested_inr)) * 100.0, 2),
+                "AI Exposure Score": enr["ai_exposure_score"],
+                "Fundamental Score": enr["fundamental_score"],
+                "Technical Score": enr["technical_score"],
+                "Analyst Rating": enr["analyst_rating"],
+                "Price Trend (1M | 6M | 1Y | 2Y)": enr["price_trend_summary"],
+                "Promoter % (2Y Trend)": enr["promoter_trend"],
+                "FII % (2Y Trend)": enr["fii_trend"],
+                "DII % (2Y Trend)": enr["dii_trend"],
+            }
+        )
+        trades_log.append(
+            {
+                "Execution Timestamp (IST)": slot_ts,
+                "Symbol": sym,
+                "Company": sec.get("company_name", sym),
+                "Action": "CUSTOM_BASKET_DEPLOY",
+                "Target Weight (%)": round(float(w_pct), 2),
+                "Shares Qty": qty,
+                "Execution Price (Rs)": round(exec_price, 2),
+                "Gross Notional (Rs)": invested_inr,
+                "Indian Delivery Tx Cost (Rs)": tx_cost,
+                "Cost (bps)": cost_info["effective_cost_bps"],
+                "Order Rationales": f"Deployed from Portfolio Builder ({active_prof})",
+            }
+        )
+
+    cash_balance = round(initial_capital_inr - total_invested - total_tx_cost, 2)
+    net_nav = round(total_invested + cash_balance, 2)
+
+    ledger = {
+        "strategy_name": "AI3 Conviction-Weighted Daily 3:00 PM IST Paper-Trading Book",
+        "scoring_profile": active_prof,
+        "active_scoring_profile": active_prof,
+        "best_5y_scoring_profile": rank_info["best_profile"],
+        "best_5y_cagr_pct": rank_info["best_profile_metrics"]["cagr_pct"],
+        "execution_schedule": "Every NSE/BSE Working Day (Mon–Fri) at 15:00:00 IST (3:00 PM IST)",
+        "inception_date": slot_date.isoformat(),
+        "inception_timestamp_ist": slot_ts,
+        "last_executed_timestamp_ist": slot_ts,
+        "next_scheduled_timestamp_ist": next_3pm_ist_slot(now_ist),
+        "initial_capital_inr": round(initial_capital_inr, 2),
+        "invested_market_value_inr": round(total_invested, 2),
+        "cash_balance_inr": cash_balance,
+        "cumulative_tx_cost_inr": round(total_tx_cost, 2),
+        "current_net_nav_inr": net_nav,
+        "current_gross_nav_inr": round(initial_capital_inr, 2),
+        "net_pnl_inr": round(net_nav - initial_capital_inr, 2),
+        "net_return_pct": round(((net_nav / initial_capital_inr) - 1.0) * 100.0, 3),
+        "positions": positions,
+        "trades_log": trades_log,
+        "nav_history": [
+            {
+                "date": slot_date.isoformat(),
+                "timestamp_ist": slot_ts,
+                "gross_nav_inr": round(initial_capital_inr, 2),
+                "net_nav_inr": net_nav,
+                "benchmark_nav_inr": round(initial_capital_inr, 2),
+                "cash_inr": cash_balance,
+                "cumulative_tx_cost_inr": round(total_tx_cost, 2),
+                "note": "Custom Portfolio Builder basket deployed to Paper Trading",
+            }
+        ],
+    }
+    PAPER_LEDGER_PATH.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
+    return ledger
 
 
 _SCHEDULER_STARTED = False

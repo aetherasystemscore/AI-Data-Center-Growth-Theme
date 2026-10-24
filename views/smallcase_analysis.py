@@ -69,9 +69,13 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
             "ANANTRAJ,12.0,Colocation Data Centres\n"
             "PERSISTENT,12.0,AI Data Engineering"
         )
-        csv_input = st.text_area("Paste `symbol,weight_pct,role` CSV:", value=default_csv, height=160)
+        uploaded_file = st.file_uploader("Or upload a `.csv` file (`symbol,weight_pct,role`):", type=["csv"])
+        if uploaded_file is not None:
+            csv_input = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+        csv_input = st.text_area("Paste `symbol,weight_pct,role` CSV:", value=csv_input if uploaded_file is not None else default_csv, height=160)
         custom_name = st.text_input("Custom Smallcase Name", value="User Uploaded AI Smallcase")
-        if st.button("Parse & Register Custom Smallcase in Session"):
+        sc_btn1, sc_btn2 = st.columns(2)
+        if sc_btn1.button("Parse & Register Custom Smallcase in Session", type="primary"):
             parsed = parse_user_smallcase_csv(csv_input)
             if parsed:
                 st.session_state["user_custom_smallcase"] = {
@@ -81,6 +85,12 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                     "constituents": parsed,
                 }
                 st.success(f"Loaded {len(parsed)} constituents for `{custom_name}`.")
+        sc_btn2.download_button(
+            "📥 Download Sample Smallcase Template (CSV)",
+            data=default_csv.encode("utf-8"),
+            file_name="sample_smallcase_template.csv",
+            mime="text/csv",
+        )
 
     # Build dictionary of unlocked smallcases
     unlocked_scs = {
@@ -122,7 +132,14 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         etf_constituents_map={e["symbol"]: e["top_constituents"] for e in etfs},
         smallcase_constituents_map=unlocked_scs,
     )
-    st.dataframe(pd.DataFrame(sample_lookthrough[:20]), use_container_width=True, hide_index=True)
+    df_lt = pd.DataFrame(sample_lookthrough[:20])
+    st.dataframe(df_lt, use_container_width=True, hide_index=True)
+    st.download_button(
+        "📥 Export Multi-Sleeve Look-Through Exposure (CSV)",
+        data=df_lt.to_csv(index=False).encode("utf-8"),
+        file_name="ai3_smallcase_lookthrough_exposure.csv",
+        mime="text/csv",
+    )
 
     st.divider()
     st.subheader("3. Smallcase Subscription Fee & Churn Drag vs DIY Replication Calculator")

@@ -16,11 +16,16 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from analytics.equity_enrichment import compute_enriched_equity_metrics
+from analytics.equity_enrichment import (
+    compute_enriched_equity_metrics,
+    load_live_market_snapshot,
+    refresh_live_market_snapshot,
+)
 from analytics.exposure_scoring import score_company_exposure
 from core.config import load_sector_taxonomy
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
+from jobs.research_news import run_research_news
 
 
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
@@ -28,6 +33,24 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.caption(
         "Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics, IPO & Daily 3 PM IST Paper-Trading Platform"
     )
+
+    live_snap = load_live_market_snapshot()
+    live_as_of = live_snap.get("as_of_ist") or "Live Feed Ready"
+    live_eq_cnt = len(live_snap.get("equities", {}))
+
+    hdr_c1, hdr_c2, hdr_c3 = st.columns([3, 1.3, 1.3])
+    hdr_c1.info(
+        f"📡 **Live Market Data Feed:** `{live_snap.get('source', 'YFINANCE_LIVE')}` | "
+        f"**Last Synced:** `{live_as_of}` ({live_eq_cnt} active equities & {len(live_snap.get('etfs', {}))} ETFs)"
+    )
+    if hdr_c2.button("🔄 Sync Live Market & Filings", type="primary", use_container_width=True):
+        with st.spinner("Fetching live NSE/BSE/Global quotes & RSS corporate disclosures..."):
+            new_snap = refresh_live_market_snapshot(update_csv=False)
+            news_res = run_research_news(repo, fetch_live_rss=True)
+            st.success(
+                f"Synced {len(new_snap.get('equities', {}))} live equities & {news_res.get('records_processed', 0)} news items."
+            )
+            st.rerun()
 
     profile = st.session_state.get("active_scoring_profile", "HIGH_GROWTH_INFRA")
     all_secs = repo.get_securities()
@@ -69,6 +92,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "Universe Tier": sec["universe_tier"],
                 "Investable": sec["is_investable"] and not bd.investability_blocked,
                 "CMP": enr["cmp"],
+                "1D Change (%)": enr.get("ret_1d_pct", 0.0),
                 "Base AI Score (100)": bd.total_score,
                 f"Profile Score ({profile})": bd.profile_adjusted_score,
                 "Fundamental Score (100)": enr["fundamental_score"],
@@ -86,10 +110,17 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "DII % (2Y Trend)": enr["dii_trend"],
                 "Evidence Type": bd.evidence_type.value,
                 "Risk Flags": ", ".join(rf.code for rf in bd.risk_flags) if bd.risk_flags else "NONE",
-                "Data Provenance": f.get("value_type", "SEED_REFERENCE_SNAPSHOT"),
+                "Data Provenance": enr.get("price_source", f.get("value_type", "LIVE_MARKET_CALIBRATED")),
             }
         )
     df_all = pd.DataFrame(rows)
+    hdr_c3.download_button(
+        "📥 Export Universe Summary (CSV)",
+        data=df_all.to_csv(index=False).encode("utf-8"),
+        file_name="ai3_universe_live_summary.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
 
     left_col, right_col = st.columns([3, 2])
     with left_col:

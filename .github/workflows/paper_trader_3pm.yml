@@ -1,0 +1,66 @@
+name: Daily 3:00 PM IST Paper Trading & Live Market Sync
+
+on:
+  schedule:
+    # 09:30 UTC = 15:00 IST (3:00 PM IST), Monday through Friday
+    - cron: "30 9 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  paper-trade-3pm-ist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Refresh Live Market Snapshot & Execute 3:00 PM IST Paper Trade Cycle
+        run: |
+          python -c "
+          from analytics.equity_enrichment import refresh_live_market_snapshot
+          from database.repository import AI3Repository
+          from data.ingestion import DataIngestionService
+          from portfolio.paper_trading import refresh_paper_ledger_mtm
+          from jobs.run_paper_trade_3pm import run_paper_trade_3pm_job
+
+          print('1. Refreshing live NSE/BSE & global market snapshot...')
+          snap_summary = refresh_live_market_snapshot(update_csv=True)
+          print('Snapshot summary:', snap_summary)
+
+          repo = AI3Repository()
+          repo.bootstrap_if_needed()
+          ingestion = DataIngestionService(repo)
+
+          print('2. Executing 3:00 PM IST paper trading cycle...')
+          res = run_paper_trade_3pm_job(repo=repo, force=True)
+          print('Paper trade cycle result:', res)
+
+          print('3. Marking open paper positions to live CMP...')
+          ledger = refresh_paper_ledger_mtm(repo=repo, ingestion=ingestion, fetch_live_yf=False)
+          print('Current Net NAV (INR):', ledger['current_net_nav_inr'])
+          "
+
+      - name: Commit and push updated live snapshot and paper ledger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data_store/live_market_snapshot.json data_store/paper_trading_ledger.json config/sample_fundamentals_synthetic.csv
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(paper-trader): automated 3:00 PM IST live MTM & paper trade sync"
+            git push
+          else
+            echo "No changes to commit."
+          fi

@@ -15,9 +15,11 @@ if _REPO_ROOT not in sys.path:
 import pandas as pd
 import streamlit as st
 
+from analytics.equity_enrichment import compute_enriched_equity_metrics
 from data.ingestion import DataIngestionService
 from data.validation import validate_ipo_record
 from database.repository import AI3Repository
+from jobs.discover_ipos import run_discover_ipos
 
 
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
@@ -57,7 +59,22 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
                 "Validation Status": "VALID" if val_check.is_valid else "INVALID",
             }
         )
-    st.dataframe(pd.DataFrame(ipo_summary), use_container_width=True, hide_index=True)
+    df_ipo = pd.DataFrame(ipo_summary)
+    st.dataframe(df_ipo, use_container_width=True, hide_index=True)
+
+    ipo_b1, ipo_b2 = st.columns([1.5, 2.5])
+    ipo_b1.download_button(
+        "📥 Export IPO & DRHP Pipeline (CSV)",
+        data=df_ipo.to_csv(index=False).encode("utf-8"),
+        file_name="ai3_ipo_drhp_pipeline.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+    if ipo_b2.button("🔍 Scan Live SEBI DRHP/RHP Feed & Update Pipeline", type="primary"):
+        with st.spinner("Scanning SEBI DRHP/RHP pipeline & verifying IPO date guards..."):
+            res = run_discover_ipos(repo)
+            st.success(res.get("message", "IPO pipeline verified."))
+            st.rerun()
 
     st.subheader("Deep-Dive DRHP / RHP Filing Inspector")
     ipo_by_id = {i["ipo_id"]: i for i in ipos}
@@ -96,12 +113,15 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         f = f_map.get(sec["symbol"], {})
         ld = sec.get("listing_date") or ""
         if ld >= "2022-01-01" or f.get("rev_cagr_5y_pct") is None:
+            enr = compute_enriched_equity_metrics(sec, f)
             recent_rows.append(
                 {
                     "Symbol": sec["symbol"],
                     "Company": sec["company_name"],
                     "Exchange": sec["exchange"],
                     "Listing Date": ld or "N/A",
+                    "Live CMP (Rs)": enr["cmp"],
+                    "1Y Return (%)": enr["return_1y_pct"],
                     "Primary Category": sec["primary_category"],
                     "Investable": sec["is_investable"],
                     "3Y Rev CAGR (%)": f.get("rev_cagr_3y_pct"),

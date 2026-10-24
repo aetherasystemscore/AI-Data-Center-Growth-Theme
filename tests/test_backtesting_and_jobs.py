@@ -15,12 +15,21 @@ from jobs.refresh_prices import run_refresh_prices
 from jobs.research_news import run_research_news
 from jobs.run_paper_trade_3pm import run_paper_trade_3pm_job
 from jobs.update_security_master import run_update_security_master
-from analytics.equity_enrichment import compute_enriched_equity_metrics, get_2y_quarterly_shareholding_and_price
+from analytics.equity_enrichment import (
+    compute_enriched_equity_metrics,
+    get_2y_quarterly_shareholding_and_price,
+    get_live_equity_quote,
+    get_live_etf_quote,
+    load_live_market_snapshot,
+)
 from portfolio.paper_trading import (
     build_forward_horizon_kpi_table,
+    deploy_custom_basket_to_paper_trading,
     ensure_paper_trading_ledger,
+    execute_manual_paper_trade,
     get_best_5y_scoring_profile,
     rank_scoring_profiles_5y,
+    refresh_paper_ledger_mtm,
     run_5y_historical_verifiable_backtest,
 )
 
@@ -141,3 +150,87 @@ def test_equity_enrichment_and_3pm_paper_trading_and_5y_backtest(tmp_path) -> No
     assert len(lb) == 9
     assert bt_5y["best_5y_profile"] == "HIGH_GROWTH_INFRA"
     assert ledger["scoring_profile"] == "HIGH_GROWTH_INFRA"
+
+
+def test_live_snapshot_manual_paper_trades_and_all_views(tmp_path) -> None:
+    snap = load_live_market_snapshot()
+    assert len(snap.get("equities", {})) >= 90
+    assert len(snap.get("etfs", {})) >= 8
+    assert get_live_equity_quote("NETWEB") is not None
+    assert get_live_etf_quote("INFRABEES") is not None
+
+    repo = AI3Repository(db_path=tmp_path / "test_manual_pt.db")
+    ingestion = DataIngestionService(repo=repo)
+    ingestion.ensure_bootstrapped()
+
+    # Save custom basket and deploy to paper trading
+    saved_id = repo.save_custom_portfolio_basket(
+        basket_name="AI Infra Test Basket",
+        weights_map={"NETWEB": 50.0, "CUMMINSIND": 50.0},
+        capital_inr=1_000_000.0,
+        scoring_profile="HIGH_GROWTH_INFRA",
+        optimisation_method="EQUAL_WEIGHT",
+    )
+    assert saved_id >= 1
+    baskets = repo.get_saved_portfolio_baskets()
+    assert any(b["basket_name"] == "AI Infra Test Basket" for b in baskets)
+
+    dep_ledger = deploy_custom_basket_to_paper_trading(
+        repo=repo,
+        ingestion=ingestion,
+        weights_map={"NETWEB": 40.0, "CUMMINSIND": 40.0},
+        initial_capital_inr=1_000_000.0,
+        scoring_profile="HIGH_GROWTH_INFRA",
+    )
+    assert len(dep_ledger["positions"]) == 2
+
+    # Execute manual BUY and SELL paper trades
+    buy_ledger = execute_manual_paper_trade(
+        repo=repo,
+        ingestion=ingestion,
+        symbol="POLYCAB",
+        side="BUY",
+        quantity=2,
+        rationale="Test manual buy",
+    )
+    assert any(p["Symbol"] == "POLYCAB" for p in buy_ledger["positions"])
+
+    sell_ledger = execute_manual_paper_trade(
+        repo=repo,
+        ingestion=ingestion,
+        symbol="POLYCAB",
+        side="SELL",
+        quantity=1,
+        rationale="Test manual partial sell",
+    )
+    poly_pos = next(p for p in sell_ledger["positions"] if p["Symbol"] == "POLYCAB")
+    assert poly_pos["Qty (Shares)"] == 1
+
+    mtm_ledger = refresh_paper_ledger_mtm(repo=repo, ingestion=ingestion, fetch_live_yf=False)
+    assert mtm_ledger["current_net_nav_inr"] > 0
+
+    # Restore clean default HIGH_GROWTH_INFRA 3:00 PM IST paper ledger
+    restored = ensure_paper_trading_ledger(repo=repo, ingestion=ingestion, force_run_today=True)
+    assert restored["scoring_profile"] == "HIGH_GROWTH_INFRA"
+
+    # Ensure all 12 views import cleanly and expose render()
+    import importlib
+
+    view_modules = [
+        "views.dashboard",
+        "views.stock_screener",
+        "views.company_research",
+        "views.value_alternatives",
+        "views.etf_analysis",
+        "views.smallcase_analysis",
+        "views.ipo_tracker",
+        "views.circular_electronics",
+        "views.portfolio_builder",
+        "views.backtesting",
+        "views.settings",
+        "views.paper_trading",
+    ]
+    for mod_name in view_modules:
+        mod = importlib.import_module(mod_name)
+        assert hasattr(mod, "render")
+

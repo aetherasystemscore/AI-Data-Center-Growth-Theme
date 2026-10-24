@@ -16,6 +16,11 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from analytics.equity_enrichment import (
+    get_live_etf_quote,
+    load_live_market_snapshot,
+    refresh_live_market_snapshot,
+)
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
 from portfolio.overlap import compute_basket_overlap, compute_pairwise_overlap_matrix
@@ -24,7 +29,7 @@ from portfolio.overlap import compute_basket_overlap, compute_pairwise_overlap_m
 def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.title("📊 Indian ETF Research & AI/Data-Centre Exposure Module")
     st.caption(
-        "Compare expense ratios, AUM, tracking error, liquidity, quantified AI/Data-Centre thematic revenue exposure, and constituent overlap across Indian ETFs."
+        "Compare live NSE prices, expense ratios, AUM, tracking error, liquidity, quantified AI/Data-Centre thematic revenue exposure, and constituent overlap across Indian ETFs."
     )
 
     etfs = repo.get_etfs()
@@ -32,26 +37,46 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
         st.warning("No ETFs found in repository.")
         return
 
-    df_etf = pd.DataFrame(
-        [
+    etf_rows = []
+    for e in etfs:
+        lq = get_live_etf_quote(e["symbol"]) or {}
+        etf_rows.append(
             {
                 "Symbol": e["symbol"],
                 "ETF Name": e["name"],
+                "Live CMP (Rs)": lq.get("cmp"),
+                "1D (%)": lq.get("ret_1d_pct"),
+                "1M (%)": lq.get("ret_1m_pct"),
+                "6M (%)": lq.get("ret_6m_pct"),
+                "1Y (%)": lq.get("ret_1y_pct"),
                 "Issuer": e["issuer"],
                 "Category": e["category"],
                 "Underlying Index": e["underlying_index"],
                 "Expense Ratio (%)": e["expense_ratio_pct"],
                 "AUM (Rs Cr)": e["aum_inr_cr"],
                 "Tracking Error (%)": e["tracking_error_pct"],
-                "Daily Turnover (Rs Cr)": e["avg_daily_turnover_inr_cr"],
+                "Daily Turnover (Rs Cr)": lq.get("avg_daily_turnover_cr") or e["avg_daily_turnover_inr_cr"],
                 "AI & Data-Centre Exposure (%)": e["ai_infra_exposure_pct"],
                 "Constituents Mapped": len(e["top_constituents"]),
             }
-            for e in etfs
-        ]
-    )
-    st.subheader("Indian ETF Universe Comparison")
+        )
+    df_etf = pd.DataFrame(etf_rows)
+    st.subheader("Indian ETF Universe Comparison (Live NSE Quotes & AI Exposure)")
     st.dataframe(df_etf, use_container_width=True, hide_index=True)
+
+    eb1, eb2 = st.columns([1.5, 2.5])
+    eb1.download_button(
+        "📥 Export ETF Comparison Table (CSV)",
+        data=df_etf.to_csv(index=False).encode("utf-8"),
+        file_name="ai3_indian_etfs_live.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+    if eb2.button("🔄 Refresh Live NSE ETF Quotes", type="primary"):
+        with st.spinner("Refreshing live NSE ETF prices via Yahoo Finance..."):
+            snap = refresh_live_market_snapshot(update_csv=False)
+            st.success(f"Synced {len(snap.get('etfs', {}))} live NSE ETFs as of {snap.get('as_of_ist')}.")
+            st.rerun()
 
     st.divider()
     col_l, col_r = st.columns([1, 1])
