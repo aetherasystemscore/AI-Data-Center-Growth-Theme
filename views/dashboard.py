@@ -23,6 +23,7 @@ from analytics.equity_enrichment import (
 )
 from analytics.exposure_scoring import score_company_exposure
 from core.config import load_sector_taxonomy
+from core.page_bootstrap import render_lakshmi_mantra_header
 from data.ingestion import DataIngestionService
 from database.repository import AI3Repository
 from jobs.research_news import run_research_news
@@ -33,6 +34,7 @@ def render(repo: AI3Repository, ingestion: DataIngestionService) -> None:
     st.caption(
         "Institutional Equity, Component Supply-Chain, ETF/Smallcase Overlap, Circular Electronics, IPO & Daily 3 PM IST Paper-Trading Platform"
     )
+    render_lakshmi_mantra_header()
 
     live_snap = load_live_market_snapshot()
     live_as_of = live_snap.get("as_of_ist") or "Live Feed Ready"

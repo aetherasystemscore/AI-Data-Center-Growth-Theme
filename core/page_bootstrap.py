@@ -62,8 +62,18 @@ def get_cached_5y_profile_ranking(cache_version: str = "v3.2") -> dict:
     return rank_scoring_profiles_5y(repo=repo, ingestion=ingestion)
 
 
+def render_lakshmi_mantra_header() -> None:
+    """Render the auspicious Lakshmi Mantra caption and bordered Lakshmi Beej Mantra & Trading Greeting box."""
+    st.caption("✨ *ॐ श्रीं महालक्ष्म्यै नमः (Om Shreem Mahalakshmyai Namah)* | Institutional High-Conviction Engine")
+    with st.container(border=True):
+        st.caption(
+            "🌱 **Lakshmi Beej Mantra (Growth & Seed Capital):** *ॐ श्रीं ह्रीं श्रीं कमले कमलालये प्रसीद प्रसीद श्रीं ह्रीं श्रीं महालक्ष्म्यै नमः (Om Shreem Hreem Shreem Kamale Kamalalaye Praseeda Praseeda Shreem Hreem Shreem Mahalakshmyai Namah)*\n\n"
+            "🌸 **Auspicious Trading Greeting:** *ॐ शुभ लाभाय नमः (Om Shubha Labhāya Namah)* — Salutations to auspiciousness and profit (*Labh*)."
+        )
+
+
 def inject_compact_styles() -> None:
-    """Inject CSS to make the entire Streamlit view denser, more compact, and easier to navigate."""
+    """Inject CSS to make the entire Streamlit view denser, more compact, and ensure the top bar is never hidden."""
     st.markdown(
         """
         <style>
@@ -71,10 +81,15 @@ def inject_compact_styles() -> None:
         [data-testid="stSidebarNav"] {
             display: none !important;
         }
-        /* Compact main container padding */
-        .block-container {
-            padding-top: 1.0rem !important;
-            padding-bottom: 0.9rem !important;
+        /* Keep Streamlit top header bar transparent and leave sufficient top padding so top bar buttons/text are never hidden */
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+        }
+        .block-container,
+        [data-testid="stAppViewBlockContainer"],
+        [data-testid="stMainBlockContainer"] {
+            padding-top: 3.75rem !important;
+            padding-bottom: 1.1rem !important;
             padding-left: 1.25rem !important;
             padding-right: 1.25rem !important;
             max-width: 100% !important;
@@ -125,10 +140,10 @@ def inject_compact_styles() -> None:
         div[data-testid="stMetricDelta"] {
             font-size: 0.67rem !important;
         }
-        /* Compact sidebar layout so Navigation Module sits cleanly at top-left */
+        /* Sidebar layout with proper top clearance below collapse button */
         section[data-testid="stSidebar"] .block-container {
-            padding-top: 0.65rem !important;
-            padding-bottom: 0.65rem !important;
+            padding-top: 2.1rem !important;
+            padding-bottom: 0.85rem !important;
             padding-left: 0.85rem !important;
             padding-right: 0.85rem !important;
         }
@@ -144,13 +159,13 @@ def inject_compact_styles() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 0.40rem;
-            padding: 0.30rem 0.60rem;
+            padding: 0.38rem 0.65rem;
             border-radius: 6px;
             background: rgba(30, 41, 59, 0.06);
             border: 1px solid rgba(128, 128, 128, 0.22);
-            font-size: 0.75rem;
-            line-height: 1.28;
-            margin-bottom: 0.15rem;
+            font-size: 0.76rem;
+            line-height: 1.32;
+            margin-bottom: 0.20rem;
         }
         .ai3-telemetry-pill {
             display: inline-flex;
@@ -229,12 +244,12 @@ def render_top_bar(show_quick_nav: bool = True) -> None:
     mem_used_gb = round(tel["effective_mem_used_mb"] / 1024.0, 2)
     mem_lim_gb = round(tel["effective_mem_limit_mb"] / 1024.0, 2)
 
-    top_left, top_right = st.columns([5.3, 1.2])
+    top_left, top_right = st.columns([4.8, 1.4])
     with top_left:
         st.markdown(
             f"""
             <div class="ai3-telemetry-strip">
-                <span><b>⚡ AI3</b> &nbsp;|&nbsp; <span class="ai3-telemetry-pill">🖥️ {tel['hosting_provider']}</span></span>
+                <span><b>⚡ AI3</b> &nbsp;|&nbsp; <span class="ai3-telemetry-pill">✨ ॐ श्रीं महालक्ष्म्यै नमः</span> &nbsp;|&nbsp; <span class="ai3-telemetry-pill">🖥️ {tel['hosting_provider']}</span></span>
                 <span class="ai3-telemetry-pill">⚙️ CPU: {tel['effective_cpu_label']}{cpu_load_str}</span>
                 <span class="ai3-telemetry-pill">🧠 RAM: {tel['process_rss_mb']} MB App • {mem_used_gb}/{mem_lim_gb} GB ({tel['effective_mem_pct']}%)</span>
                 <span class="ai3-telemetry-pill">💾 Disk: {tel['disk_free_gb']} GB Free</span>
@@ -289,6 +304,7 @@ def render_sidebar_controls() -> str:
 
     with st.sidebar:
         st.markdown("### ⚡ AI3 Navigation")
+        render_lakshmi_mantra_header()
         selected_label = st.radio(
             "Navigation Module",
             options=sidebar_labels,
