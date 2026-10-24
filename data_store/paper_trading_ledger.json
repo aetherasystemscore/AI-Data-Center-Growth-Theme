@@ -7,7 +7,7 @@
   "execution_schedule": "Every NSE/BSE Working Day (Mon\u2013Fri) at 15:00:00 IST (3:00 PM IST)",
   "inception_date": "2026-10-23",
   "inception_timestamp_ist": "2026-10-23 15:00:00 IST",
-  "last_executed_timestamp_ist": "2026-10-23 15:00:00 IST",
+  "last_executed_timestamp_ist": "2026-10-24 15:05:29 IST",
   "next_scheduled_timestamp_ist": "2026-10-26 15:00:00 IST",
   "initial_capital_inr": 1000000.0,
   "invested_market_value_inr": 990846.25,
@@ -535,6 +535,16 @@
       "cash_inr": 6399.67,
       "cumulative_tx_cost_inr": 2754.08,
       "note": "Inception 3:00 PM IST portfolio deployment"
+    },
+    {
+      "date": "2026-10-24",
+      "timestamp_ist": "2026-10-24 15:05:29 IST",
+      "gross_nav_inr": 1000000.0,
+      "net_nav_inr": 997245.92,
+      "benchmark_nav_inr": 1000000.0,
+      "cash_inr": 6399.67,
+      "cumulative_tx_cost_inr": 2754.08,
+      "note": "Daily 3:00 PM IST working-day mark-to-market"
     }
   ]
 }
