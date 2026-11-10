@@ -3,12 +3,12 @@
   "scoring_profile": "HIGH_GROWTH_INFRA",
   "active_scoring_profile": "HIGH_GROWTH_INFRA",
   "best_5y_scoring_profile": "HIGH_GROWTH_INFRA",
-  "best_5y_cagr_pct": 24.34,
+  "best_5y_cagr_pct": 24.26,
   "execution_schedule": "Every NSE/BSE Working Day (Mon\u2013Fri) at 15:00:00 IST (3:00 PM IST)",
-  "inception_date": "2026-11-09",
-  "inception_timestamp_ist": "2026-11-09 15:00:00 IST",
-  "last_executed_timestamp_ist": "2026-11-09 15:51:48 IST",
-  "next_scheduled_timestamp_ist": "2026-11-10 15:00:00 IST",
+  "inception_date": "2026-11-10",
+  "inception_timestamp_ist": "2026-11-10 15:00:00 IST",
+  "last_executed_timestamp_ist": "2026-11-10 15:48:10 IST",
+  "next_scheduled_timestamp_ist": "2026-11-11 15:00:00 IST",
   "initial_capital_inr": 1000000.0,
   "invested_market_value_inr": 996061.85,
   "cash_balance_inr": 1169.57,
@@ -343,7 +343,7 @@
   ],
   "trades_log": [
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "ANANTRAJ",
       "Company": "Anant Raj Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -356,7 +356,7 @@
       "Order Rationales": "AI Score 66.72/100 | Fund 73.5/100 | Tech 18.0/100 (BEARISH (<200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "BLUESTARCO",
       "Company": "Blue Star Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -369,7 +369,7 @@
       "Order Rationales": "AI Score 64.01/100 | Fund 76.1/100 | Tech 54.9/100 (BULLISH (>50 & 200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "KAYNES",
       "Company": "Kaynes Technology India Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -382,7 +382,7 @@
       "Order Rationales": "AI Score 64.93/100 | Fund 78.3/100 | Tech 19.9/100 (BEARISH (<200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "NETWEB",
       "Company": "Netweb Technologies India Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -395,7 +395,7 @@
       "Order Rationales": "AI Score 82.58/100 | Fund 83.8/100 | Tech 41.4/100 (CONSOLIDATING (>200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "PERSISTENT",
       "Company": "Persistent Systems Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -408,7 +408,7 @@
       "Order Rationales": "AI Score 71.26/100 | Fund 83.0/100 | Tech 77.1/100 (BULLISH (>50 & 200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "SYRMA",
       "Company": "Syrma SGS Technology Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -421,7 +421,7 @@
       "Order Rationales": "AI Score 55.86/100 | Fund 63.9/100 | Tech 85.8/100 (CONSOLIDATING (>200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "TDPOWERSYS",
       "Company": "TD Power Systems Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -434,7 +434,7 @@
       "Order Rationales": "AI Score 72.81/100 | Fund 86.2/100 | Tech 62.3/100 (CONSOLIDATING (>200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "TRIL",
       "Company": "Transformers and Rectifiers (India) Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -447,7 +447,7 @@
       "Order Rationales": "AI Score 66.48/100 | Fund 76.2/100 | Tech 37.8/100 (BEARISH (<200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "APARINDS",
       "Company": "APAR Industries Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -460,7 +460,7 @@
       "Order Rationales": "AI Score 64.67/100 | Fund 79.9/100 | Tech 72.8/100 (CONSOLIDATING (>200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "CUMMINSIND",
       "Company": "Cummins India Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -473,7 +473,7 @@
       "Order Rationales": "AI Score 74.45/100 | Fund 80.4/100 | Tech 22.1/100 (BEARISH (<200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "CGPOWER",
       "Company": "CG Power and Industrial Solutions Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -486,7 +486,7 @@
       "Order Rationales": "AI Score 63.71/100 | Fund 83.2/100 | Tech 35.0/100 (BEARISH (<200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "POLYCAB",
       "Company": "Polycab India Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -499,7 +499,7 @@
       "Order Rationales": "AI Score 62.65/100 | Fund 77.0/100 | Tech 43.7/100 (CONSOLIDATING (>200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "KIRLOSENG",
       "Company": "Kirloskar Oil Engines Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -512,7 +512,7 @@
       "Order Rationales": "AI Score 65.27/100 | Fund 68.2/100 | Tech 48.5/100 (BEARISH (<200 DMA))"
     },
     {
-      "Execution Timestamp (IST)": "2026-11-09 15:00:00 IST",
+      "Execution Timestamp (IST)": "2026-11-10 15:00:00 IST",
       "Symbol": "HITACHIEN",
       "Company": "Hitachi Energy India Limited",
       "Action": "INITIAL_BUY_3PM_IST",
@@ -527,8 +527,8 @@
   ],
   "nav_history": [
     {
-      "date": "2026-11-09",
-      "timestamp_ist": "2026-11-09 15:00:00 IST",
+      "date": "2026-11-10",
+      "timestamp_ist": "2026-11-10 15:00:00 IST",
       "gross_nav_inr": 1000000.0,
       "net_nav_inr": 997231.42,
       "benchmark_nav_inr": 1000000.0,
@@ -537,8 +537,8 @@
       "note": "Inception 3:00 PM IST portfolio deployment"
     },
     {
-      "date": "2026-11-09",
-      "timestamp_ist": "2026-11-09 15:51:48 IST",
+      "date": "2026-11-10",
+      "timestamp_ist": "2026-11-10 15:48:10 IST",
       "gross_nav_inr": 1000000.0,
       "net_nav_inr": 997231.42,
       "benchmark_nav_inr": 1000000.0,
